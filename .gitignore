@@ -35,3 +35,6 @@ pids/
 # Coverage/test output
 coverage/
 .nyc_output/
+
+# Cached hero/item/ability images from the Valve CDN
+cache/
