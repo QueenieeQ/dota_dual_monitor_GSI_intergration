@@ -850,6 +850,62 @@
     applyOrientation();
 
     // ======================================================================
+    // Pin panels: click the pin icon to stick a panel to the top of the
+    // page while you scroll past the rest. Pinned panels stack below the
+    // top bar in document order; a ResizeObserver keeps that stack correct
+    // as panels change height (new events, buildings destroyed, etc.).
+    // ======================================================================
+    const PIN_ICON = '<path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5v6h2v-6h5v-2z"/>';
+    const PINNED_KEY = 'd2sm.pinned.v1';
+    let pinnedIds = new Set();
+    try { pinnedIds = new Set(JSON.parse(localStorage.getItem(PINNED_KEY) || '[]')); } catch { /* ignore */ }
+    function persistPinned() {
+        try { localStorage.setItem(PINNED_KEY, JSON.stringify([...pinnedIds])); } catch { /* ignore */ }
+    }
+
+    function updatePinnedOffsets() {
+        const gap = 8;
+        let top = (document.querySelector('.top-bar')?.offsetHeight || 0) + gap;
+        document.querySelectorAll('.card.pinned').forEach((card) => {
+            card.style.top = `${top}px`;
+            top += card.offsetHeight + gap;
+        });
+    }
+
+    function setPinned(card, on) {
+        card.classList.toggle('pinned', on);
+        const btn = card.querySelector('.pin-btn');
+        btn.classList.toggle('pinned', on);
+        btn.setAttribute('aria-pressed', String(on));
+        btn.title = on ? 'Unpin panel' : 'Pin panel to top';
+        if (on) pinnedIds.add(card.dataset.panel); else pinnedIds.delete(card.dataset.panel);
+        persistPinned();
+        updatePinnedOffsets();
+    }
+
+    const pinnableCards = document.querySelectorAll('.card[data-panel]');
+    pinnableCards.forEach((card) => {
+        const btn = document.createElement('button');
+        btn.className = 'pin-btn';
+        btn.setAttribute('aria-label', 'Pin panel to top');
+        btn.setAttribute('aria-pressed', 'false');
+        btn.title = 'Pin panel to top';
+        btn.innerHTML = `<svg viewBox="0 0 24 24">${PIN_ICON}</svg>`;
+        btn.addEventListener('click', () => setPinned(card, !card.classList.contains('pinned')));
+        card.appendChild(btn);
+        if (pinnedIds.has(card.dataset.panel)) setPinned(card, true);
+    });
+
+    if (window.ResizeObserver) {
+        const pinObserver = new ResizeObserver(() => updatePinnedOffsets());
+        pinnableCards.forEach((card) => pinObserver.observe(card));
+        const topBar = document.querySelector('.top-bar');
+        if (topBar) pinObserver.observe(topBar);
+    }
+    window.addEventListener('resize', updatePinnedOffsets);
+    updatePinnedOffsets();
+
+    // ======================================================================
     // Socket wiring
     // ======================================================================
     setInterval(() => {
