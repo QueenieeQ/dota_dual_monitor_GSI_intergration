@@ -1,6 +1,6 @@
 // Sends fake GSI payloads to the server so the dashboard can be tested without Dota 2.
 // Usage: npm run simulate   (server must be running)   Optional: SPEED=10 for 10x game time
-const URL = process.env.GSI_URL || 'http://127.0.0.1:3000/';
+const URL = process.env.GSI_URL || 'http://127.0.0.1:3636/';
 const TOKEN = process.env.GSI_TOKEN || 'sidemonitor-change-me';
 const SPEED = Number(process.env.SPEED) || 5;
 

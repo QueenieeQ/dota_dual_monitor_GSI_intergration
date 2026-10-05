@@ -3,7 +3,7 @@
 A dashboard for a second monitor that updates live while you play Dota 2. It shows the match clock, the game status, your gold and net worth with green/red change deltas, and a net worth vs. match time chart.
 
 ```
-Dota 2 ──HTTP POST (GSI JSON)──▶ server.js (Express :3000) ──Socket.io──▶ browser (public/index.html)
+Dota 2 ──HTTP POST (GSI JSON)──▶ server.js (Express :3636) ──Socket.io──▶ browser (public/index.html)
 ```
 
 ## Files
@@ -70,13 +70,13 @@ Without this flag, Dota 2 ignores the cfg folder. Restart Dota after adding the 
 npm start
 ```
 
-Open **http://localhost:3000** on your side monitor. Press F11 for fullscreen.
+Open **http://localhost:3636** on your side monitor. Press F11 for fullscreen.
 
-To view it from a tablet or phone on the same network, use `http://<this-PC's-LAN-IP>:3000`. You may need to allow Node.js through Windows Firewall.
+To view it from a tablet or phone on the same network, use `http://<this-PC's-LAN-IP>:3636`. You may need to allow Node.js through Windows Firewall.
 
 ## Verification
 
-1. **Server is up.** Open http://localhost:3000/health. It should return `{"ok":true,...}`.
+1. **Server is up.** Open http://localhost:3636/health. It should return `{"ok":true,...}`.
 2. **Dashboard works without the game.** Leave `npm start` running, then in a second terminal run:
    ```powershell
    npm run simulate
@@ -91,7 +91,7 @@ To view it from a tablet or phone on the same network, use `http://<this-PC's-LA
 |---|---|
 | Dashboard stays on "Waiting for Dota 2…" | Check that `-gamestateintegration` is in the launch options, that the cfg is in the right folder with the right name, and that you restarted Dota |
 | "Server offline" | `npm start` isn't running, or it crashed (check its console) |
-| Port 3000 already in use | Run `$env:PORT=3001; npm start`, and change the `uri` in the cfg to port 3001 |
+| Port 3636 already in use | Run `$env:PORT=3637; npm start`, and change the `uri` in the cfg to port 3637 |
 | "Spectating" status | GSI only reports your own economy when you are a player. Spectator and replay payloads are keyed per player and aren't shown |
 | Net worth shows 0 | Your Dota build doesn't include `player.net_worth`. Gold still works |
 
