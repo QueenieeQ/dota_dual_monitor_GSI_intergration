@@ -402,12 +402,16 @@ body[data-orientation="portrait"] #eventsCard { order: 7; }
 .minimap img { object-fit: cover; }
 .minimap-status { margin-top: 8px; }
 
-/* ----- Item / ability slots ----- */
-.items-main { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 12px; }
+/* ----- Item / ability slots -----
+   Each group (inventory, TP, neutral, backpack, stash) wraps as its own flex
+   item, so the panel reflows to fill the available width instead of leaving
+   a fixed-width row with empty space to the right on wider cards. */
+.items-groups { display: flex; flex-wrap: wrap; gap: 14px 20px; }
+.item-group { display: flex; flex-direction: column; gap: 4px; }
+.item-group:not(:has(> :not([hidden]))) { display: none; }
 .slot-grid { display: grid; gap: 6px; }
 .slot-grid.inv { grid-template-columns: repeat(3, 74px); }
-.slot-grid.small { grid-template-columns: repeat(6, 50px); margin-bottom: 12px; }
-.side-slots { display: grid; gap: 4px; }
+.slot-grid.small { grid-template-columns: repeat(6, 50px); }
 .slot-label { font: 500 12px/16px var(--md-ref-typeface-plain); letter-spacing: 0.5px; color: var(--md-sys-color-on-surface-variant); margin-bottom: 4px; }
 .slot {
     position: relative;

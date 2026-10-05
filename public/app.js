@@ -872,7 +872,7 @@
         });
     }
 
-    function setPinned(card, on) {
+    function setPinned(card, on, { scroll = false } = {}) {
         card.classList.toggle('pinned', on);
         const btn = card.querySelector('.pin-btn');
         btn.classList.toggle('pinned', on);
@@ -881,6 +881,14 @@
         if (on) pinnedIds.add(card.dataset.panel); else pinnedIds.delete(card.dataset.panel);
         persistPinned();
         updatePinnedOffsets();
+
+        // Pinning mid-scroll leaves the panel stuck wherever it happened to be
+        // until the user scrolls past it; jump straight to its locked slot instead.
+        if (on && scroll) {
+            const targetTop = parseFloat(card.style.top) || 0;
+            const delta = card.getBoundingClientRect().top - targetTop;
+            if (delta > 0.5) window.scrollBy({ top: delta, behavior: 'smooth' });
+        }
     }
 
     const pinnableCards = document.querySelectorAll('.card[data-panel]');
@@ -891,7 +899,7 @@
         btn.setAttribute('aria-pressed', 'false');
         btn.title = 'Pin panel to top';
         btn.innerHTML = `<svg viewBox="0 0 24 24">${PIN_ICON}</svg>`;
-        btn.addEventListener('click', () => setPinned(card, !card.classList.contains('pinned')));
+        btn.addEventListener('click', () => setPinned(card, !card.classList.contains('pinned'), { scroll: true }));
         card.appendChild(btn);
         if (pinnedIds.has(card.dataset.panel)) setPinned(card, true);
     });

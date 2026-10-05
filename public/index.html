@@ -126,17 +126,27 @@
             <!-- ===== Items ===== -->
             <section class="card" id="itemsCard" data-panel="items" hidden>
                 <h2>Items</h2>
-                <div class="items-main">
-                    <div class="slot-grid inv" id="inventory"></div>
-                    <div class="side-slots">
-                        <div class="slot-label">TP</div><div id="tpSlot"></div>
-                        <div class="slot-label">Neutral</div><div id="neutralSlot"></div>
+                <div class="items-groups">
+                    <div class="item-group">
+                        <div class="slot-grid inv" id="inventory"></div>
+                    </div>
+                    <div class="item-group">
+                        <div class="slot-label">TP</div>
+                        <div id="tpSlot"></div>
+                    </div>
+                    <div class="item-group">
+                        <div class="slot-label">Neutral</div>
+                        <div id="neutralSlot"></div>
+                    </div>
+                    <div class="item-group">
+                        <div class="slot-label">Backpack</div>
+                        <div class="slot-grid small" id="backpack"></div>
+                    </div>
+                    <div class="item-group">
+                        <div class="slot-label" id="stashLabel">Stash</div>
+                        <div class="slot-grid small" id="stash"></div>
                     </div>
                 </div>
-                <div class="slot-label">Backpack</div>
-                <div class="slot-grid small" id="backpack"></div>
-                <div class="slot-label" id="stashLabel">Stash</div>
-                <div class="slot-grid small" id="stash"></div>
             </section>
 
             <!-- ===== Abilities ===== -->
