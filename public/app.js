@@ -34,11 +34,12 @@
     };
     const heroName = (name) => HERO_NAMES[name.replace('npc_dota_hero_', '')] || prettify(name);
 
-    // Valve's public CDN for hero / item / ability art. Falls back to text when offline.
-    const CDN = 'https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react';
-    const heroImg = (name) => `${CDN}/heroes/${name.replace('npc_dota_hero_', '')}.png`;
-    const itemImg = (name) => `${CDN}/items/${name.startsWith('item_recipe') ? 'recipe' : name.replace(/^item_/, '')}.png`;
-    const abilityImg = (name) => `${CDN}/abilities/${name}.png`;
+    // Hero / item / ability art from Valve's CDN, proxied and cached by server.js.
+    // Falls back to text labels when an image can't be loaded.
+    const imgName = (s) => String(s).toLowerCase().replace(/[^a-z0-9_]/g, '');
+    const heroImg = (name) => `/img/heroes/${imgName(name.replace('npc_dota_hero_', ''))}.png`;
+    const itemImg = (name) => `/img/items/${name.startsWith('item_recipe') ? 'recipe' : imgName(name.replace(/^item_/, ''))}.png`;
+    const abilityImg = (name) => `/img/abilities/${imgName(name)}.png`;
 
     const css = getComputedStyle(document.documentElement);
     const C = (name) => css.getPropertyValue(name).trim();
@@ -180,6 +181,28 @@
     });
     const series = chart.data.datasets[0].data;
 
+    // Re-color the chart whenever the M3 theme changes (hero, light/dark, settings)
+    function themeChart() {
+        const primary = C('--md-sys-color-primary');
+        const ds = chart.data.datasets[0];
+        ds.borderColor = primary;
+        ds.pointHoverBackgroundColor = primary;
+        ds.pointHoverBorderColor = C('--md-sys-color-surface-container-low');
+        ds.backgroundColor = /^#[0-9a-f]{6}$/i.test(primary) ? primary + '26' : 'rgba(128,128,128,0.15)';
+        const muted = C('--md-sys-color-on-surface-variant');
+        const grid = C('--md-sys-color-outline-variant');
+        chart.options.scales.x.ticks.color = muted;
+        chart.options.scales.y.ticks.color = muted;
+        chart.options.scales.x.grid.color = grid + '55';
+        chart.options.scales.y.grid.color = grid + '88';
+        chart.options.scales.x.border.color = grid;
+        chart.options.plugins.tooltip.backgroundColor = C('--md-sys-color-inverse-surface');
+        chart.options.plugins.tooltip.titleColor = C('--md-sys-color-inverse-on-surface');
+        chart.options.plugins.tooltip.bodyColor = C('--md-sys-color-inverse-on-surface');
+        chart.update('none');
+    }
+    window.addEventListener('themechange', themeChart);
+
     function renderChart() {
         $('chartEmpty').hidden = series.length > 0;
         chart.options.scales.x.max = series.length ? Math.max(60, series[series.length - 1].x) : undefined;
@@ -220,8 +243,6 @@
 
     function renderHeader(data) {
         const map = data.map;
-        $('clock').textContent = fmtClock(map.clock_time ?? 0);
-        $('clock').classList.toggle('paused', !!map.paused);
 
         const stateLabel = GAME_STATES[map.game_state] || String(map.game_state || 'Unknown').replace('DOTA_GAMERULES_STATE_', '');
         const subParts = [];
@@ -242,41 +263,165 @@
             $('direScore').textContent = map.dire_score;
         }
 
-        // Map chips: day/night, Roshan, ward stock
-        const chips = [];
-        if (has(map.daytime)) {
-            if (map.nightstalker_night) chips.push(chip('☾ Nightstalker night', 'warn'));
-            else chips.push(chip(map.daytime ? '☀ Day' : '☾ Night'));
-        }
-
-        const rosh = roshanText(data);
-        if (rosh) chips.push(chip(`Roshan <b>${rosh.text}</b>`, rosh.kind));
-
-        if (map.ward_purchase_cooldown > 0) chips.push(chip(`Obs restock <b>${fmtClock(map.ward_purchase_cooldown)}</b>`));
-        if (map.radiant_ward_purchase_cooldown > 0) chips.push(chip(`Radiant obs <b>${fmtClock(map.radiant_ward_purchase_cooldown)}</b>`));
-        if (map.dire_ward_purchase_cooldown > 0) chips.push(chip(`Dire obs <b>${fmtClock(map.dire_ward_purchase_cooldown)}</b>`));
-
-        $('mapChips').innerHTML = chips.join('');
+        // Snapshot for the live timer pills (ticked by renderTimers)
+        timer.map = map;
+        timer.roshan = data.roshan || null;
+        timer.clock = typeof map.clock_time === 'number' ? map.clock_time : null;
+        timer.at = performance.now();
+        timer.running = !map.paused && TICKING_STATES.has(map.game_state);
+        const wardCd = map.ward_purchase_cooldown;
+        if (wardCd > 0 && !(timer.wardPrev > 0)) timer.wardMax = wardCd; // a new restock started
+        timer.wardMax = Math.max(timer.wardMax || 0, wardCd || 0);
+        timer.wardPrev = wardCd;
+        renderTimers();
     }
 
-    function roshanText(data) {
-        const r = data.roshan;
-        if (r && has(r.alive)) {
-            if (r.alive) {
-                const pct = r.max_health ? Math.round((r.health / r.max_health) * 100) : null;
-                return { text: pct !== null && pct < 100 ? `${pct}% HP` : 'Alive', kind: pct !== null && pct < 100 ? 'warn' : 'good' };
-            }
-            const t = r.phase_time_remaining > 0 ? ` ${fmtClock(r.phase_time_remaining)}` : '';
-            return { text: `${r.spawn_phase ? prettify(r.spawn_phase) : 'Dead'}${t}`, kind: 'bad' };
-        }
-        const st = data.map.roshan_state;
-        if (!st) return null;
-        const t = data.map.roshan_state_end_seconds > 0 ? ` ${fmtClock(data.map.roshan_state_end_seconds)}` : '';
-        if (st === 'alive') return { text: 'Alive', kind: 'good' };
-        if (st === 'respawn_base') return { text: `Dead${t}`, kind: 'bad' };
-        if (st === 'respawn_variable') return { text: `May respawn${t}`, kind: 'warn' };
-        return { text: prettify(st) + t, kind: '' };
+    // ======================================================================
+    // Live timer pills: day/night, Roshan, observer wards
+    // ======================================================================
+    const DAY_NIGHT = 300;         // 5 min day, 5 min night, starting with day at 0:00
+    const ROSH_MIN = 480;          // Roshan: 8 min minimum respawn…
+    const ROSH_WINDOW = 180;       // …then a random 0-3 min window
+    const TICKING_STATES = new Set(['DOTA_GAMERULES_STATE_PRE_GAME', 'DOTA_GAMERULES_STATE_GAME_IN_PROGRESS']);
+    const timer = { map: null, roshan: null, clock: null, at: 0, running: false, wardMax: 0, wardPrev: 0 };
+    let openChip = null;
+
+    // Seconds elapsed since the last packet (0 when paused / disabled), capped so a stalled feed doesn't run away
+    function elapsed() {
+        if (!timer.running || !window.Settings.get('liveTimers')) return 0;
+        return Math.min(2, (performance.now() - timer.at) / 1000);
     }
+    const mod = (a, n) => ((a % n) + n) % n;
+
+    function setChip(id, { show, title, sub, ring, icon, p }) {
+        const chipEl = $(`chip${id}`);
+        chipEl.hidden = !show;
+        if (!show) return;
+        const key = id.toLowerCase();
+        $(`${key}Title`).textContent = title;
+        $(`${key}Sub`).textContent = sub;
+        const ringEl = $(`${key}Ring`);
+        ringEl.className = `ring ${ring || ''}`;
+        ringEl.style.setProperty('--p', Math.max(0, Math.min(1, p ?? 1)).toFixed(3));
+        if (icon) ringEl.firstElementChild.textContent = icon;
+        chipEl.className = `assist-chip ${ring === 'good' || ring === 'bad' || ring === 'warn' ? ring : ''}`;
+    }
+
+    function dayNightInfo(map, c) {
+        if (!has(map.daytime)) return null;
+        if (map.nightstalker_night) {
+            return { title: 'Nightstalker night', sub: 'Dark Ascension', ring: 'night', icon: '☾', p: 1, details: [['Phase', 'Forced night (Nightstalker ultimate)']] };
+        }
+        const isDay = !!map.daytime;
+        const inPhase = c < 0 ? 0 : mod(c, DAY_NIGHT);
+        const remaining = c < 0 ? DAY_NIGHT - c : DAY_NIGHT - inPhase;
+        const expectedDay = c < 0 || Math.floor(c / DAY_NIGHT) % 2 === 0;
+        // Near a boundary the packet may lag a moment; elsewhere a mismatch means an ability changed it
+        const offCycle = isDay !== expectedDay && inPhase > 2 && remaining > 2;
+        const nextAt = c + remaining;
+        return {
+            title: isDay ? 'Day' : 'Night',
+            sub: offCycle ? 'changed by an ability' : `${isDay ? 'Night' : 'Day'} in ${fmtClock(remaining)}`,
+            ring: isDay ? 'day' : 'night',
+            icon: isDay ? '☀' : '☾',
+            p: offCycle ? 1 : c < 0 ? 0 : inPhase / DAY_NIGHT,
+            details: [
+                ['Now', isDay ? 'Day: normal vision' : 'Night: reduced vision'],
+                [`${expectedDay ? 'Night' : 'Day'} starts`, `at ${fmtClock(nextAt)} (in ${fmtClock(remaining)})`],
+                [`${expectedDay ? 'Day' : 'Night'} again`, `at ${fmtClock(nextAt + DAY_NIGHT)}`],
+                ['Cycle', '5 min day / 5 min night from 0:00'],
+            ],
+        };
+    }
+
+    function roshanInfo(map, roshan, c, dt) {
+        let state = map.roshan_state;
+        let remaining = map.roshan_state_end_seconds;
+        let hp = null;
+        if (roshan && has(roshan.alive)) {           // observer payload
+            state = roshan.alive ? 'alive' : (roshan.spawn_phase || 'respawn_base');
+            remaining = roshan.phase_time_remaining;
+            hp = roshan.max_health ? roshan.health / roshan.max_health : null;
+        }
+        if (!state) return null;
+        remaining = Math.max(0, (remaining || 0) - dt);
+
+        if (state === 'alive') {
+            return {
+                title: 'Roshan alive', sub: hp !== null && hp < 1 ? `${Math.round(hp * 100)}% HP` : 'In the pit',
+                ring: hp !== null && hp < 1 ? 'warn' : 'good', p: hp ?? 1,
+                details: [['State', 'Alive'], ...(hp !== null ? [['Health', `${Math.round(hp * 100)}%`]] : [])],
+            };
+        }
+        if (state === 'respawn_base') {
+            return {
+                title: 'Roshan dead', sub: `Earliest in ${fmtClock(remaining)}`, ring: 'bad',
+                p: 1 - remaining / ROSH_MIN,
+                details: [
+                    ['Earliest respawn', `${fmtClock(c + remaining)} (in ${fmtClock(remaining)})`],
+                    ['Latest respawn', `${fmtClock(c + remaining + ROSH_WINDOW)}`],
+                ],
+            };
+        }
+        if (state === 'respawn_variable') {
+            return {
+                title: 'Roshan may spawn', sub: `Latest in ${fmtClock(remaining)}`, ring: 'warn',
+                p: 1 - remaining / ROSH_WINDOW,
+                details: [['Respawns any time before', `${fmtClock(c + remaining)} (in ${fmtClock(remaining)})`]],
+            };
+        }
+        return { title: `Roshan: ${prettify(state)}`, sub: remaining > 0 ? fmtClock(remaining) : '', ring: '', p: 1, details: [['State', prettify(state)]] };
+    }
+
+    function wardInfo(map, dt) {
+        const team = [];
+        if (has(map.radiant_ward_purchase_cooldown)) team.push(['Radiant restock', map.radiant_ward_purchase_cooldown > 0 ? fmtClock(map.radiant_ward_purchase_cooldown) : 'in stock']);
+        if (has(map.dire_ward_purchase_cooldown)) team.push(['Dire restock', map.dire_ward_purchase_cooldown > 0 ? fmtClock(map.dire_ward_purchase_cooldown) : 'in stock']);
+        if (!has(map.ward_purchase_cooldown) && !team.length) return null;
+        const remaining = Math.max(0, (map.ward_purchase_cooldown || 0) - dt);
+        if (remaining > 0) {
+            return {
+                title: 'Obs restocking', sub: `Next in ${fmtClock(remaining)}`, ring: 'warn',
+                p: timer.wardMax ? 1 - remaining / timer.wardMax : 0,
+                details: [['Next observer ward', `in ${fmtClock(remaining)}`], ...team],
+            };
+        }
+        return { title: 'Observer wards', sub: 'In stock', ring: 'good', p: 1, details: [['Shop', 'Observer ward available'], ...team] };
+    }
+
+    function renderTimers() {
+        const map = timer.map;
+        if (!map) {
+            ['Day', 'Rosh', 'Ward'].forEach((id) => { $(`chip${id}`).hidden = true; });
+            $('chipDetails').hidden = true;
+            return;
+        }
+        const dt = elapsed();
+        const c = (timer.clock ?? 0) + dt;
+        $('clock').textContent = timer.clock === null ? '--:--' : fmtClock(Math.floor(c));
+        $('clock').classList.toggle('paused', !!map.paused);
+
+        const info = {
+            Day: dayNightInfo(map, c),
+            Rosh: roshanInfo(map, timer.roshan, c, dt),
+            Ward: wardInfo(map, dt),
+        };
+        for (const [id, i] of Object.entries(info)) setChip(id, i ? { show: true, ...i } : { show: false });
+
+        const details = $('chipDetails');
+        const open = openChip && info[openChip];
+        details.hidden = !open;
+        if (open) details.innerHTML = `<dl>${open.details.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>`;
+    }
+
+    for (const id of ['Day', 'Rosh', 'Ward']) {
+        $(`chip${id}`).addEventListener('click', () => {
+            openChip = openChip === id ? null : id;
+            for (const other of ['Day', 'Rosh', 'Ward']) $(`chip${other}`).setAttribute('aria-expanded', String(openChip === other));
+            renderTimers();
+        });
+    }
+    setInterval(renderTimers, 250);
 
     // ======================================================================
     // Hero
@@ -436,7 +581,7 @@
         void v.offsetWidth; // restart animation
         v.classList.add(delta > 0 ? 'flash-up' : 'flash-down');
         clearTimeout(deltaTimers[id]);
-        deltaTimers[id] = setTimeout(() => el.classList.add('stale'), 5000);
+        deltaTimers[id] = setTimeout(() => el.classList.add('stale'), (Number(window.Settings.get('deltaFade')) || 5) * 1000);
     }
 
     function setSigned(id, n) {
@@ -646,6 +791,51 @@
     $('rawDetails').addEventListener('toggle', () => lastData && renderRaw(lastData, true));
 
     // ======================================================================
+    // Top bar actions: theme mode button + settings
+    // ======================================================================
+    const THEME_MODES = {
+        light: { next: 'dark', label: 'Light theme', icon: 'M12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10zM2 13h2a1 1 0 0 0 0-2H2a1 1 0 0 0 0 2zm18 0h2a1 1 0 0 0 0-2h-2a1 1 0 0 0 0 2zM11 2v2a1 1 0 0 0 2 0V2a1 1 0 0 0-2 0zm0 18v2a1 1 0 0 0 2 0v-2a1 1 0 0 0-2 0zM5.99 4.58a1 1 0 0 0-1.41 1.41l1.06 1.06a1 1 0 0 0 1.41-1.41L5.99 4.58zm12.37 12.37a1 1 0 0 0-1.41 1.41l1.06 1.06a1 1 0 0 0 1.41-1.41l-1.06-1.06zm1.06-10.96a1 1 0 0 0-1.41-1.41l-1.06 1.06a1 1 0 0 0 1.41 1.41l1.06-1.06zM7.05 18.36a1 1 0 0 0-1.41-1.41l-1.06 1.06a1 1 0 0 0 1.41 1.41l1.06-1.06z' },
+        dark: { next: 'auto', label: 'Dark theme', icon: 'M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.39 5.39 0 0 1-4.4 2.26 5.4 5.4 0 0 1-3.14-9.8c-.44-.06-.9-.1-1.36-.1z' },
+        auto: { next: 'light', label: 'Theme follows game time (day = light, night = dark)', icon: 'M20 8.69V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12 20 8.69zM12 18V6a6 6 0 0 1 0 12z' },
+    };
+    function renderThemeButton() {
+        const m = THEME_MODES[window.Settings.get('themeMode')] || THEME_MODES.auto;
+        $('themeIcon').innerHTML = `<path d="${m.icon}"/>`;
+        $('themeBtn').title = `${m.label} (click to change)`;
+        $('themeBtn').setAttribute('aria-label', m.label);
+        $('themeBtn').classList.toggle('tonal', window.Settings.get('themeMode') === 'auto');
+    }
+    let snackTimer = 0;
+    function snackbar(text) {
+        let el = document.querySelector('.snackbar');
+        if (!el) { el = document.createElement('div'); el.className = 'snackbar'; el.setAttribute('role', 'status'); document.body.appendChild(el); }
+        el.textContent = text;
+        el.style.opacity = '1';
+        clearTimeout(snackTimer);
+        snackTimer = setTimeout(() => { el.style.opacity = '0'; }, 2200);
+    }
+    $('themeBtn').addEventListener('click', () => {
+        const next = (THEME_MODES[window.Settings.get('themeMode')] || THEME_MODES.auto).next;
+        window.Settings.set('themeMode', next);
+        snackbar(THEME_MODES[next].label);
+    });
+    $('settingsBtn').addEventListener('click', () => window.Settings.open());
+
+    function applyPanelSettings() {
+        document.querySelectorAll('[data-panel]').forEach((el) => {
+            el.toggleAttribute('data-off', window.Settings.get(`panel.${el.dataset.panel}`) === false);
+        });
+        chart.resize();
+    }
+    window.Settings.onChange((key) => {
+        if (key === 'themeMode') renderThemeButton();
+        if (key.startsWith('panel.')) applyPanelSettings();
+        if (key === 'liveTimers') renderTimers();
+    });
+    renderThemeButton();
+    applyPanelSettings();
+
+    // ======================================================================
     // Socket wiring
     // ======================================================================
     setInterval(() => {
@@ -667,11 +857,15 @@
     socket.on('gameStateUpdate', (data) => {
         lastPacketAt = Date.now();
         lastData = data;
+        window.__lastGsi = data;
+        window.dispatchEvent(new CustomEvent('gsi', { detail: data }));
         renderRaw(data);
+        window.Minimap.update(data);
 
         if (!data.map) {
             setStatus('warn', 'In menus', 'Dota 2 connected — not in a match');
-            $('clock').textContent = '--:--';
+            timer.map = null;
+            renderTimers();
             return;
         }
 
