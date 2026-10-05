@@ -38,6 +38,11 @@ app.get('/health', (req, res) => {
     });
 });
 
+// Latest raw payload, handy for seeing which fields your client actually sends
+app.get('/state', (req, res) => {
+    res.json(lastState);
+});
+
 // Dota 2 POSTs the full game state here on every change (and every heartbeat)
 app.post('/', (req, res) => {
     const state = req.body;
@@ -46,6 +51,12 @@ app.post('/', (req, res) => {
         console.warn('[gsi] rejected payload with missing/invalid auth token');
         return res.sendStatus(401);
     }
+
+    // "previously"/"added" only describe what changed since the last packet;
+    // the dashboard works from full snapshots, so don't ship them to browsers.
+    delete state.previously;
+    delete state.added;
+    delete state.auth;
 
     lastState = state;
     lastUpdateAt = Date.now();
@@ -58,7 +69,7 @@ app.post('/', (req, res) => {
 function recordHistory(state) {
     const map = state.map;
     const player = state.player;
-    if (!map || !player || typeof player.net_worth !== 'number') return;
+    if (!map) return;
 
     // New match → start a fresh chart
     if (map.matchid && map.matchid !== currentMatchId) {
@@ -67,6 +78,9 @@ function recordHistory(state) {
         history = [];
         io.emit('history', history);
     }
+
+    // Only a playing client reports its own net worth (spectator payloads don't)
+    if (!player || typeof player.net_worth !== 'number') return;
 
     const t = map.clock_time;
     if (typeof t !== 'number' || t < 0) return; // skip pre-horn
