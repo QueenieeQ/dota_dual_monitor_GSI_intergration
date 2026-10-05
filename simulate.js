@@ -1,6 +1,7 @@
 // Sends fake GSI payloads to the server so the dashboard can be tested without Dota 2.
 // Usage: npm run simulate   (server must be running)
-// Options (env vars): SPEED=10 for 10x game time, SPECTATE=1 for an observer-style payload
+// Options (env vars): SPEED=10 for 10x game time, SPECTATE=1 for an observer-style payload,
+//                    NO_MINIMAP=1 to test the "own hero position only" fallback
 const URL = process.env.GSI_URL || 'http://127.0.0.1:3636/';
 const TOKEN = process.env.GSI_TOKEN || 'sidemonitor-change-me';
 const SPEED = Number(process.env.SPEED) || 5;
@@ -136,6 +137,67 @@ function item(name, extra = {}) {
     return { name, purchaser: 0, can_cast: false, cooldown: 0, passive: name !== 'empty', ...extra };
 }
 
+// ---------------------------------------------------------------------------
+// Minimap: heroes walk around lane waypoints, creeps flow down the lanes
+// (world coordinates roughly span -8200..8200 on both axes)
+// ---------------------------------------------------------------------------
+const LANES = {
+    top: [[-6600, -4200], [-6500, 5900], [4200, 6000]],
+    mid: [[-4600, -4100], [4300, 3800]],
+    bot: [[-4100, -6600], [6000, -6500], [6200, 4100]],
+};
+const HERO_ROUTES = [
+    [[-7000, -6500], [-5200, -3500], [-1500, -1200], [0, 0], [-1500, -1200]],
+    [[-6500, -2000], [-6500, 3000], [-4000, 5800], [-6500, 3000]],
+    [[-2000, -6600], [2500, -6500], [5800, -6200], [2500, -6500]],
+    [[-3500, -3000], [-800, -3800], [1500, -1500], [-800, -3800]],
+    [[-4500, 0], [-3000, 2200], [-1000, 1000], [-3000, 2200]],
+];
+function along(points, t) {
+    // t in [0,1) along a polyline
+    const segs = points.length - 1;
+    const f = t * segs, i = Math.min(segs - 1, Math.floor(f)), k = f - i;
+    return [points[i][0] + (points[i + 1][0] - points[i][0]) * k, points[i][1] + (points[i + 1][1] - points[i][1]) * k];
+}
+function heroPos(slot) {
+    const radiant = slot < 5;
+    const route = HERO_ROUTES[slot % 5];
+    const loop = ((Math.max(clock, 0) / (70 + slot * 7)) + slot * 0.17) % 1;
+    const closed = route.concat([route[0]]);
+    const [x, y] = along(closed, loop);
+    return radiant ? [x, y] : [-x + 300, -y + 200]; // Dire mirrors across the river
+}
+const HEROES_ALL = ['antimage', 'crystal_maiden', 'pudge', 'lina', 'axe', 'sniper', 'invoker', 'juggernaut', 'lion', 'tidehunter'];
+function minimapBlock() {
+    const mm = {};
+    let n = 0;
+    const add = (o) => { mm[`o${n++}`] = { yaw: 0, ...o }; };
+    for (let slot = 0; slot < 10; slot++) {
+        const [x, y] = heroPos(slot);
+        add({ xpos: Math.round(x), ypos: Math.round(y), image: 'minimap_herocircle', team: slot < 5 ? 2 : 3, unitname: `npc_dota_hero_${HEROES_ALL[slot]}`, visionrange: 1800 });
+    }
+    // Creep waves: Radiant walks the lane forwards, Dire backwards
+    for (const lane of Object.values(LANES)) {
+        for (let w = 0; w < 3; w++) {
+            const t = ((Math.max(clock, 0) / 60 + w / 3) % 1) * 0.5;
+            for (const [team, tt] of [[2, t], [3, 1 - t]]) {
+                const [x, y] = along(lane, Math.min(0.999, tt));
+                for (let c = 0; c < 3; c++) add({ xpos: Math.round(x + c * 90), ypos: Math.round(y - c * 70), image: 'minimap_creep', team, unitname: 'npc_dota_creep_lane', visionrange: 750 });
+            }
+        }
+    }
+    add({ xpos: -2600, ypos: 300, image: 'minimap_ward_obs', team: 2, unitname: 'npc_dota_observer_wards', visionrange: 1600 });
+    add({ xpos: 1600, ypos: -3200, image: 'minimap_ward_obs', team: 2, unitname: 'npc_dota_observer_wards', visionrange: 1600 });
+    add({ xpos: 2600, ypos: 1600, image: 'minimap_ward_sent', team: 3, unitname: 'npc_dota_sentry_wards', visionrange: 1000 });
+    add({ xpos: -2800, ypos: 2300, image: 'minimap_roshan', team: 4, unitname: 'npc_dota_roshan', visionrange: 1000 });
+    add({ xpos: -6800, ypos: -6100, image: 'minimap_courier', team: 2, unitname: 'npc_dota_courier', visionrange: 0 });
+    // A few towers
+    for (const [x, y, team] of [[-6150, -800, 2], [-1550, -1400, 2], [4900, -6100, 2], [-4600, 6000, 3], [500, 700, 3], [6250, -1800, 3]]) {
+        add({ xpos: x, ypos: y, image: 'minimap_tower90', team, unitname: 'npc_dota_tower', visionrange: 1900 });
+    }
+    return mm;
+}
+
 function localPayload() {
     const gold = Math.floor(me.reliable + me.unreliable);
     const lv = level();
@@ -193,7 +255,7 @@ function localPayload() {
             gold_lost_to_death: me.lostToDeath, gold_spent_on_buybacks: 0,
         },
         hero: {
-            xpos: -6000, ypos: -5800, id: 1, name: 'npc_dota_hero_antimage', level: lv, xp: me.xp,
+            xpos: Math.round(heroPos(0)[0]), ypos: Math.round(heroPos(0)[1]), id: 1, name: 'npc_dota_hero_antimage', level: lv, xp: me.xp,
             alive: me.respawn === 0, respawn_seconds: me.respawn,
             buyback_cost: 200 + lv * 30 + Math.floor((gold + me.itemValue) / 13), buyback_cooldown: me.buybackCd,
             health: Math.max(0, me.hp), max_health: maxHp, health_percent: Math.round((Math.max(0, me.hp) / maxHp) * 100),
@@ -208,6 +270,7 @@ function localPayload() {
         abilities,
         items,
         events,
+        ...(process.env.NO_MINIMAP === '1' ? {} : { minimap: minimapBlock() }),
         auth: { token: TOKEN },
     };
 }
@@ -224,6 +287,7 @@ function spectatorPayload() {
     const heroes = (ids) => Object.fromEntries(ids.map((id) => [`player${id}`, {
         name: `npc_dota_hero_${HEROES[id]}`, level: Math.min(30, 1 + Math.floor(Math.max(clock, 0) / 120)),
         alive: (clock + id * 11) % 97 > 8, respawn_seconds: 8,
+        xpos: Math.round(heroPos(id)[0]), ypos: Math.round(heroPos(id)[1]),
     }]));
     const towers = (side, prefix, raxPrefix) => {
         const b = {};

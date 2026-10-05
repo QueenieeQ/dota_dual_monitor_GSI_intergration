@@ -1,121 +1,160 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#1a1110">
     <title>Dota 2 Side Monitor</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23c23c2a'/%3E%3Cpath d='M9 23 23 9M9 9h4M19 23h4' stroke='%23fff' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto+Flex:opsz,wght@8..144,400..700&family=Roboto+Mono:wght@500;700&display=swap">
     <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-<div class="app">
-    <!-- ===== Header: clock, status, score, objectives ===== -->
-    <section class="card header">
-        <div class="clock" id="clock">--:--</div>
-        <div class="meta">
-            <div class="status"><span class="dot" id="statusDot"></span><span id="statusText">Waiting for Dota 2…</span></div>
-            <div class="sub" id="statusSub">No GSI data received yet</div>
-        </div>
-        <div class="score" id="score" hidden>
-            <span class="team radiant">Radiant</span>
-            <span class="score-num" id="radiantScore">0</span>
-            <span class="score-sep">:</span>
-            <span class="score-num" id="direScore">0</span>
-            <span class="team dire">Dire</span>
-        </div>
-        <div class="chips" id="mapChips"></div>
-    </section>
+<!-- ===== Top app bar: clock, status, score, live timers, theme + settings ===== -->
+<header class="top-bar">
+    <div class="clock" id="clock">--:--</div>
+    <div class="meta">
+        <div class="status"><span class="dot" id="statusDot"></span><span id="statusText">Waiting for Dota 2…</span></div>
+        <div class="sub" id="statusSub">No GSI data received yet</div>
+    </div>
+    <div class="score" id="score" hidden>
+        <span class="team radiant">Radiant</span>
+        <span class="score-num" id="radiantScore">0</span>
+        <span class="score-sep">:</span>
+        <span class="score-num" id="direScore">0</span>
+        <span class="team dire">Dire</span>
+    </div>
 
+    <div class="timers" id="timers">
+        <button class="assist-chip" id="chipDay" hidden aria-expanded="false">
+            <span class="ring" id="dayRing"><span class="ring-icon" id="dayIcon">☀</span></span>
+            <span class="chip-text"><span class="chip-title" id="dayTitle">Day</span><span class="chip-sub" id="daySub"></span></span>
+        </button>
+        <button class="assist-chip" id="chipRosh" hidden aria-expanded="false">
+            <span class="ring" id="roshRing"><span class="ring-icon">R</span></span>
+            <span class="chip-text"><span class="chip-title" id="roshTitle">Roshan</span><span class="chip-sub" id="roshSub"></span></span>
+        </button>
+        <button class="assist-chip" id="chipWard" hidden aria-expanded="false">
+            <span class="ring" id="wardRing"><span class="ring-icon">◉</span></span>
+            <span class="chip-text"><span class="chip-title" id="wardTitle">Observer wards</span><span class="chip-sub" id="wardSub"></span></span>
+        </button>
+    </div>
+
+    <div class="bar-actions">
+        <button class="icon-btn" id="themeBtn" aria-label="Theme" title="Theme">
+            <svg viewBox="0 0 24 24" id="themeIcon"></svg>
+        </button>
+        <button class="icon-btn" id="settingsBtn" aria-label="Settings" title="Settings">
+            <svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.48.48 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 0 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z"/></svg>
+        </button>
+    </div>
+
+    <div class="chip-details" id="chipDetails" hidden></div>
+</header>
+
+<main class="app">
     <div class="columns">
-    <div class="col">
-    <!-- ===== Hero ===== -->
-    <section class="card" id="heroCard" hidden>
-        <h2>Hero</h2>
-        <div class="hero-top">
-            <img class="portrait" id="heroImg" alt="">
-            <div class="hero-id">
-                <div class="hero-name" id="heroName">—</div>
-                <div class="sub" id="heroLevel"></div>
-            </div>
-            <div class="kda-big" id="kdaBig"></div>
+        <div class="col">
+            <!-- ===== Hero ===== -->
+            <section class="card" id="heroCard" data-panel="hero" hidden>
+                <h2>Hero</h2>
+                <div class="hero-top">
+                    <img class="portrait" id="heroImg" alt="">
+                    <div class="hero-id">
+                        <div class="hero-name" id="heroName">—</div>
+                        <div class="sub" id="heroLevel"></div>
+                    </div>
+                    <div class="kda-big" id="kdaBig"></div>
+                </div>
+                <div class="bar hp"><div class="fill" id="hpFill"></div><span id="hpText"></span></div>
+                <div class="bar mp"><div class="fill" id="mpFill"></div><span id="mpText"></span></div>
+                <div class="life" id="lifeState"></div>
+                <div class="buyback" id="buyback"></div>
+                <div class="chips" id="heroChips"></div>
+                <div class="talents" id="talents"></div>
+            </section>
+
+            <!-- ===== Performance ===== -->
+            <section class="card" id="perfCard" data-panel="performance" hidden>
+                <h2>Performance</h2>
+                <div class="stat-tiles" id="perfTiles"></div>
+            </section>
         </div>
-        <div class="bar hp"><div class="fill" id="hpFill"></div><span id="hpText"></span></div>
-        <div class="bar mp"><div class="fill" id="mpFill"></div><span id="mpText"></span></div>
-        <div class="life" id="lifeState"></div>
-        <div class="buyback" id="buyback"></div>
-        <div class="chips" id="heroChips"></div>
-        <div class="talents" id="talents"></div>
-    </section>
 
-    <!-- ===== Performance ===== -->
-    <section class="card" id="perfCard" hidden>
-        <h2>Performance</h2>
-        <div class="stat-tiles" id="perfTiles"></div>
-    </section>
+        <div class="col">
+            <!-- ===== Economy ===== -->
+            <section class="card economy" id="economyCard" data-panel="economy">
+                <h2>Economy</h2>
+                <div class="econ-top">
+                    <div class="big-stat">
+                        <div class="label">Net worth</div>
+                        <div class="value" id="netWorth">0</div>
+                        <span class="delta" id="netWorthDelta">±0</span>
+                    </div>
+                    <div class="big-stat">
+                        <div class="label">Current gold</div>
+                        <div class="value gold-value" id="gold">0</div>
+                        <span class="delta" id="goldDelta">±0</span>
+                    </div>
+                </div>
+                <div class="mini-grid">
+                    <div class="mini"><div class="label">Reliable</div><div class="value" id="goldReliable">0</div></div>
+                    <div class="mini"><div class="label">Unreliable</div><div class="value" id="goldUnreliable">0</div></div>
+                    <div class="mini"><div class="label">GPM</div><div class="value" id="gpm">0</div></div>
+                    <div class="mini"><div class="label">XPM</div><div class="value" id="xpm">0</div></div>
+                    <div class="mini"><div class="label">Net worth, last 60s</div><div class="value" id="nw60">±0</div></div>
+                    <div class="mini"><div class="label">LH / DN</div><div class="value" id="lhdn">0 / 0</div></div>
+                </div>
+                <div class="breakdown" id="goldSources"></div>
+                <div class="breakdown" id="goldSpending"></div>
+            </section>
 
-    </div>
-    <div class="col">
-    <!-- ===== Economy ===== -->
-    <section class="card economy" id="economyCard">
-        <h2>Economy</h2>
-        <div class="econ-top">
-            <div class="big-stat">
-                <div class="label">Net worth</div>
-                <div class="value" id="netWorth">0</div>
-                <span class="delta" id="netWorthDelta">±0</span>
-            </div>
-            <div class="big-stat">
-                <div class="label">Current gold</div>
-                <div class="value gold-value" id="gold">0</div>
-                <span class="delta" id="goldDelta">±0</span>
-            </div>
+            <!-- ===== Minimap ===== -->
+            <section class="card" id="minimapCard" data-panel="minimap" hidden>
+                <h2>Minimap</h2>
+                <div class="minimap" id="minimapWrap">
+                    <img id="minimapBg" alt="">
+                    <canvas id="minimapCanvas" aria-label="Minimap with hero and unit positions"></canvas>
+                </div>
+                <div class="sub minimap-status" id="minimapStatus"></div>
+            </section>
         </div>
-        <div class="mini-grid">
-            <div class="mini"><div class="label">Reliable</div><div class="value" id="goldReliable">0</div></div>
-            <div class="mini"><div class="label">Unreliable</div><div class="value" id="goldUnreliable">0</div></div>
-            <div class="mini"><div class="label">GPM</div><div class="value" id="gpm">0</div></div>
-            <div class="mini"><div class="label">XPM</div><div class="value" id="xpm">0</div></div>
-            <div class="mini"><div class="label">Net worth, last 60s</div><div class="value" id="nw60">±0</div></div>
-            <div class="mini"><div class="label">LH / DN</div><div class="value" id="lhdn">0 / 0</div></div>
+
+        <div class="col">
+            <!-- ===== Items ===== -->
+            <section class="card" id="itemsCard" data-panel="items" hidden>
+                <h2>Items</h2>
+                <div class="items-main">
+                    <div class="slot-grid inv" id="inventory"></div>
+                    <div class="side-slots">
+                        <div class="slot-label">TP</div><div id="tpSlot"></div>
+                        <div class="slot-label">Neutral</div><div id="neutralSlot"></div>
+                    </div>
+                </div>
+                <div class="slot-label">Backpack</div>
+                <div class="slot-grid small" id="backpack"></div>
+                <div class="slot-label" id="stashLabel">Stash</div>
+                <div class="slot-grid small" id="stash"></div>
+            </section>
+
+            <!-- ===== Abilities ===== -->
+            <section class="card" id="abilitiesCard" data-panel="abilities" hidden>
+                <h2>Abilities</h2>
+                <div class="abilities" id="abilities"></div>
+            </section>
+
+            <!-- ===== Events ===== -->
+            <section class="card" id="eventsCard" data-panel="events" hidden>
+                <h2>Match events</h2>
+                <ol class="events" id="events"></ol>
+            </section>
         </div>
-        <div class="breakdown" id="goldSources"></div>
-        <div class="breakdown" id="goldSpending"></div>
-    </section>
-
-    </div>
-    <div class="col">
-    <!-- ===== Items ===== -->
-    <section class="card" id="itemsCard" hidden>
-        <h2>Items</h2>
-        <div class="items-main">
-            <div class="slot-grid inv" id="inventory"></div>
-            <div class="side-slots">
-                <div class="slot-label">TP</div><div id="tpSlot"></div>
-                <div class="slot-label">Neutral</div><div id="neutralSlot"></div>
-            </div>
-        </div>
-        <div class="slot-label">Backpack</div>
-        <div class="slot-grid small" id="backpack"></div>
-        <div class="slot-label" id="stashLabel">Stash</div>
-        <div class="slot-grid small" id="stash"></div>
-    </section>
-
-    <!-- ===== Abilities ===== -->
-    <section class="card" id="abilitiesCard" hidden>
-        <h2>Abilities</h2>
-        <div class="abilities" id="abilities"></div>
-    </section>
-
-    <!-- ===== Events ===== -->
-    <section class="card" id="eventsCard" hidden>
-        <h2>Match events</h2>
-        <ol class="events" id="events"></ol>
-    </section>
-
-    </div>
     </div>
 
     <!-- ===== Net worth chart ===== -->
-    <section class="card chart-card" id="chartCard">
+    <section class="card chart-card" id="chartCard" data-panel="chart">
         <div class="chart-head">
             <h2>Net worth over match time</h2>
             <span class="sub" id="pointCount"></span>
@@ -127,28 +166,31 @@
     </section>
 
     <!-- ===== Buildings (spectator / observer) ===== -->
-    <section class="card" id="buildingsCard" hidden>
+    <section class="card" id="buildingsCard" data-panel="buildings" hidden>
         <h2>Buildings</h2>
         <div class="buildings" id="buildings"></div>
     </section>
 
     <!-- ===== Scoreboard (spectator / observer) ===== -->
-    <section class="card wide" id="scoreboardCard" hidden>
+    <section class="card" id="scoreboardCard" data-panel="scoreboard" hidden>
         <h2>Scoreboard</h2>
         <div class="table-wrap"><table class="scoreboard" id="scoreboard"></table></div>
     </section>
 
     <!-- ===== Raw data inspector ===== -->
-    <section class="card wide">
+    <section class="card" data-panel="raw">
         <details id="rawDetails">
             <summary>Raw GSI data <span class="sub" id="rawKeys"></span></summary>
             <pre id="rawJson"></pre>
         </details>
     </section>
-</div>
+</main>
 
 <script src="/vendor/chart.umd.js"></script>
 <script src="/socket.io/socket.io.js"></script>
+<script src="/settings.js"></script>
+<script src="/minimap.js"></script>
 <script src="/app.js"></script>
+<script type="module" src="/theme.js"></script>
 </body>
 </html>
