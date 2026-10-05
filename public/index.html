@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Dota 2 Side Monitor</title>
+    <style>
+        :root {
+            --bg: #0d0f13;
+            --surface: #161920;
+            --border: #262a35;
+            --text: #eef0f4;
+            --text-2: #a3a9b8;
+            --muted: #6b7282;
+            --accent: #5ea2ff;
+            --good: #3fc76a;
+            --bad: #f0524a;
+            --warn: #f2b33d;
+            --radiant: #3fc76a;
+            --dire: #f0524a;
+            --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+        }
+        * { box-sizing: border-box; }
+        html, body { height: 100%; }
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            font: 15px/1.4 system-ui, "Segoe UI", Roboto, sans-serif;
+        }
+        .app {
+            min-height: 100%;
+            display: grid;
+            grid-template-columns: minmax(280px, 380px) 1fr;
+            grid-template-rows: auto 1fr;
+            gap: 16px;
+            padding: 16px;
+        }
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 18px 20px;
+            min-width: 0;
+        }
+        .card h2 {
+            margin: 0 0 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--muted);
+        }
+
+        /* ---------- Header: clock + status ---------- */
+        .header {
+            grid-column: 1 / -1;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 12px 28px;
+        }
+        .clock {
+            font-family: var(--mono);
+            font-size: clamp(2.6rem, 6vw, 4rem);
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+            line-height: 1;
+        }
+        .clock.paused { color: var(--warn); }
+        .meta { display: flex; flex-direction: column; gap: 6px; }
+        .status {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 600;
+            font-size: 1.05rem;
+        }
+        .dot {
+            width: 10px; height: 10px; border-radius: 50%;
+            background: var(--muted);
+            flex: none;
+        }
+        .dot.live { background: var(--good); box-shadow: 0 0 0 4px rgba(63, 199, 106, 0.18); }
+        .dot.warn { background: var(--warn); }
+        .dot.off  { background: var(--bad); }
+        .sub { color: var(--text-2); font-size: 0.9rem; }
+        .hero {
+            margin-left: auto;
+            text-align: right;
+        }
+        .hero-name { font-size: 1.25rem; font-weight: 600; }
+        .kda { font-family: var(--mono); color: var(--text-2); }
+
+        /* ---------- Economy ---------- */
+        .economy { display: flex; flex-direction: column; gap: 18px; }
+        .big-stat .label { color: var(--text-2); font-size: 0.85rem; }
+        .big-stat .value {
+            font-family: var(--mono);
+            font-size: clamp(2rem, 4vw, 2.8rem);
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+            line-height: 1.1;
+        }
+        .gold-value { color: #f5c542; }
+        .delta {
+            display: inline-block;
+            margin-top: 4px;
+            font-family: var(--mono);
+            font-size: 1.05rem;
+            font-weight: 600;
+            color: var(--muted);
+            transition: opacity 0.6s;
+        }
+        .delta.up   { color: var(--good); }
+        .delta.down { color: var(--bad); }
+        .delta.stale { opacity: 0.45; }
+        .flash-up   { animation: flashUp 0.7s ease-out; }
+        .flash-down { animation: flashDown 0.7s ease-out; }
+        @keyframes flashUp   { from { background: rgba(63, 199, 106, 0.25); } to { background: transparent; } }
+        @keyframes flashDown { from { background: rgba(240, 82, 74, 0.25); } to { background: transparent; } }
+
+        .mini-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px 16px;
+            padding-top: 14px;
+            border-top: 1px solid var(--border);
+        }
+        .mini .label { color: var(--muted); font-size: 0.78rem; }
+        .mini .value { font-family: var(--mono); font-size: 1.1rem; font-variant-numeric: tabular-nums; }
+
+        /* ---------- Chart ---------- */
+        .chart-card { display: flex; flex-direction: column; }
+        .chart-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+        .chart-wrap { position: relative; flex: 1; min-height: 260px; }
+        .empty {
+            position: absolute; inset: 0;
+            display: grid; place-items: center;
+            color: var(--muted);
+            pointer-events: none;
+        }
+
+        @media (max-width: 760px) {
+            .app { grid-template-columns: 1fr; grid-template-rows: auto; }
+            .hero { margin-left: 0; text-align: left; }
+            .chart-wrap { min-height: 240px; }
+        }
+    </style>
+</head>
+<body>
+<div class="app">
+    <!-- Header: match clock + game status -->
+    <section class="card header">
+        <div class="clock" id="clock">--:--</div>
+        <div class="meta">
+            <div class="status"><span class="dot" id="statusDot"></span><span id="statusText">Waiting for Dota 2…</span></div>
+            <div class="sub" id="statusSub">No GSI data received yet</div>
+        </div>
+        <div class="hero">
+            <div class="hero-name" id="heroName">—</div>
+            <div class="kda" id="kda"></div>
+        </div>
+    </section>
+
+    <!-- Player economy -->
+    <section class="card economy">
+        <h2>Economy</h2>
+
+        <div class="big-stat">
+            <div class="label">Net worth</div>
+            <div class="value" id="netWorth">0</div>
+            <span class="delta" id="netWorthDelta">±0</span>
+        </div>
+
+        <div class="big-stat">
+            <div class="label">Current gold</div>
+            <div class="value gold-value" id="gold">0</div>
+            <span class="delta" id="goldDelta">±0</span>
+        </div>
+
+        <div class="mini-grid">
+            <div class="mini"><div class="label">Reliable</div><div class="value" id="goldReliable">0</div></div>
+            <div class="mini"><div class="label">Unreliable</div><div class="value" id="goldUnreliable">0</div></div>
+            <div class="mini"><div class="label">GPM</div><div class="value" id="gpm">0</div></div>
+            <div class="mini"><div class="label">XPM</div><div class="value" id="xpm">0</div></div>
+            <div class="mini"><div class="label">Net worth, last 60s</div><div class="value" id="nw60">±0</div></div>
+            <div class="mini"><div class="label">LH / DN</div><div class="value" id="lhdn">0 / 0</div></div>
+        </div>
+    </section>
+
+    <!-- Net worth chart -->
+    <section class="card chart-card">
+        <div class="chart-head">
+            <h2>Net worth over match time</h2>
+            <span class="sub" id="pointCount"></span>
+        </div>
+        <div class="chart-wrap">
+            <canvas id="netWorthChart" aria-label="Line chart of net worth against match time"></canvas>
+            <div class="empty" id="chartEmpty">Chart starts at the horn (0:00)</div>
+        </div>
+    </section>
+</div>
+
+<script src="/vendor/chart.umd.js"></script>
+<script src="/socket.io/socket.io.js"></script>
+<script>
+(() => {
+    const $ = (id) => document.getElementById(id);
+    const fmtNum = (n) => Math.round(n).toLocaleString();
+    const fmtSigned = (n) => (n > 0 ? '+' : n < 0 ? '−' : '±') + Math.abs(Math.round(n)).toLocaleString();
+
+    function fmtClock(seconds) {
+        const s = Math.abs(Math.trunc(seconds));
+        const m = Math.floor(s / 60);
+        return `${seconds < 0 ? '-' : ''}${m}:${String(s % 60).padStart(2, '0')}`;
+    }
+
+    const GAME_STATES = {
+        DOTA_GAMERULES_STATE_INIT: 'Initializing',
+        DOTA_GAMERULES_STATE_WAIT_FOR_PLAYERS_TO_LOAD: 'Loading players',
+        DOTA_GAMERULES_STATE_CUSTOM_GAME_SETUP: 'Custom game setup',
+        DOTA_GAMERULES_STATE_PLAYER_DRAFT: 'Player draft',
+        DOTA_GAMERULES_STATE_HERO_SELECTION: 'Hero selection',
+        DOTA_GAMERULES_STATE_STRATEGY_TIME: 'Strategy time',
+        DOTA_GAMERULES_STATE_TEAM_SHOWCASE: 'Team showcase',
+        DOTA_GAMERULES_STATE_WAIT_FOR_MAP_TO_LOAD: 'Loading map',
+        DOTA_GAMERULES_STATE_PRE_GAME: 'Pre-game',
+        DOTA_GAMERULES_STATE_GAME_IN_PROGRESS: 'Game in progress',
+        DOTA_GAMERULES_STATE_POST_GAME: 'Post-game',
+        DOTA_GAMERULES_STATE_DISCONNECT: 'Disconnected',
+    };
+
+    // Dota sends a heartbeat every 30s (cfg "heartbeat"), so silence beyond ~35s means no signal
+    const STALE_AFTER_MS = 35000;
+
+    // ---------- Chart ----------
+    const css = getComputedStyle(document.documentElement);
+    const C = (name) => css.getPropertyValue(name).trim();
+
+    const chart = new Chart($('netWorthChart'), {
+        type: 'line',
+        data: {
+            datasets: [{
+                label: 'Net worth',
+                data: [],                 // [{ x: clock seconds, y: net worth }]
+                borderColor: C('--accent'),
+                backgroundColor: 'rgba(94, 162, 255, 0.10)',
+                borderWidth: 2,
+                fill: true,
+                tension: 0.15,
+                pointRadius: 0,
+                pointHoverRadius: 5,
+                pointHoverBorderWidth: 2,
+                pointHoverBorderColor: C('--surface'),
+                pointHoverBackgroundColor: C('--accent'),
+            }],
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            parsing: false,
+            normalized: true,
+            interaction: { mode: 'index', intersect: false },
+            scales: {
+                x: {
+                    type: 'linear',
+                    min: 0,
+                    ticks: {
+                        color: C('--muted'),
+                        maxTicksLimit: 8,
+                        callback: (v) => fmtClock(v),
+                    },
+                    grid: { color: 'rgba(255,255,255,0.04)' },
+                    border: { color: C('--border') },
+                },
+                y: {
+                    beginAtZero: true,
+                    ticks: { color: C('--muted'), callback: (v) => v >= 1000 ? (v / 1000) + 'k' : v },
+                    grid: { color: 'rgba(255,255,255,0.06)' },
+                    border: { display: false },
+                },
+            },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    displayColors: false,
+                    callbacks: {
+                        title: (items) => fmtClock(items[0].parsed.x),
+                        label: (item) => `Net worth ${fmtNum(item.parsed.y)}`,
+                    },
+                },
+            },
+        },
+    });
+    const series = chart.data.datasets[0].data;
+
+    function renderChart() {
+        $('chartEmpty').hidden = series.length > 0;
+        $('pointCount').textContent = series.length ? `${series.length} samples` : '';
+        chart.update('none');
+    }
+
+    function addPoint(t, nw) {
+        if (typeof t !== 'number' || t < 0 || typeof nw !== 'number') return;
+        const last = series[series.length - 1];
+        if (last && last.x === t) { last.y = nw; }
+        else if (!last || t > last.x) { series.push({ x: t, y: nw }); }
+        else return;
+        renderChart();
+    }
+
+    // ---------- Economy deltas ----------
+    let prev = { gold: null, nw: null };
+    const deltaTimers = {};
+
+    function showDelta(id, valueId, delta) {
+        const el = $(id);
+        el.textContent = (delta > 0 ? '▲ ' : '▼ ') + fmtSigned(delta);
+        el.className = 'delta ' + (delta > 0 ? 'up' : 'down');
+        const v = $(valueId);
+        v.classList.remove('flash-up', 'flash-down');
+        void v.offsetWidth; // restart animation
+        v.classList.add(delta > 0 ? 'flash-up' : 'flash-down');
+        clearTimeout(deltaTimers[id]);
+        deltaTimers[id] = setTimeout(() => el.classList.add('stale'), 5000);
+    }
+
+    function setSigned(id, n) {
+        const el = $(id);
+        el.textContent = fmtSigned(n);
+        el.style.color = n > 0 ? C('--good') : n < 0 ? C('--bad') : '';
+    }
+
+    function netWorth60s(nowT, nowNw) {
+        // Find the sample closest to 60 game-seconds ago
+        for (let i = series.length - 1; i >= 0; i--) {
+            if (series[i].x <= nowT - 60) return nowNw - series[i].y;
+        }
+        return series.length ? nowNw - series[0].y : 0;
+    }
+
+    // ---------- Status ----------
+    let lastPacketAt = 0;
+
+    function setStatus(kind, text, sub) {
+        $('statusDot').className = 'dot ' + kind;
+        $('statusText').textContent = text;
+        if (sub !== undefined) $('statusSub').textContent = sub;
+    }
+
+    setInterval(() => {
+        if (lastPacketAt && Date.now() - lastPacketAt > STALE_AFTER_MS) {
+            setStatus('off', 'No signal', 'Dota 2 stopped sending updates — game closed or not in a match');
+        }
+    }, 2000);
+
+    // ---------- Socket ----------
+    const socket = io();
+    socket.on('connect', () => { if (!lastPacketAt) setStatus('', 'Waiting for Dota 2…', 'Connected to server, no GSI data yet'); });
+    socket.on('disconnect', () => setStatus('off', 'Server offline', 'Lost connection to the Node.js server — reconnecting…'));
+
+    socket.on('history', (points) => {
+        series.length = 0;
+        for (const p of points) series.push({ x: p.t, y: p.nw });
+        renderChart();
+    });
+
+    socket.on('gameStateUpdate', (data) => {
+        lastPacketAt = Date.now();
+        const map = data.map;
+        const player = data.player;
+
+        if (!map) {
+            setStatus('warn', 'In menus', 'Dota 2 connected — not in a match');
+            $('clock').textContent = '--:--';
+            return;
+        }
+
+        // Clock + status
+        $('clock').textContent = fmtClock(map.clock_time ?? 0);
+        $('clock').classList.toggle('paused', !!map.paused);
+
+        const stateLabel = GAME_STATES[map.game_state] || (map.game_state || 'Unknown').replace('DOTA_GAMERULES_STATE_', '');
+
+        const subParts = [map.daytime ? '☀ Day' : '☾ Night'];
+        if (map.matchid) subParts.push(`Match ${map.matchid}`);
+        if (map.win_team && map.win_team !== 'none') subParts.unshift(`${map.win_team === 'radiant' ? 'Radiant' : 'Dire'} victory`);
+
+        if (map.paused) setStatus('warn', 'Paused', subParts.join(' · '));
+        else if (map.game_state === 'DOTA_GAMERULES_STATE_GAME_IN_PROGRESS') setStatus('live', stateLabel, subParts.join(' · '));
+        else setStatus('warn', stateLabel, subParts.join(' · '));
+
+        // Spectator/replay payloads key players as player.team2.player0 etc. — no single "you"
+        if (!player || player.gold === undefined) {
+            if (player && (player.team2 || player.team3)) {
+                setStatus('warn', 'Spectating', 'Economy panel needs you to be a player in the match');
+            }
+            return;
+        }
+
+        // Hero / KDA
+        const hero = data.hero;
+        if (hero?.name) {
+            const pretty = hero.name.replace('npc_dota_hero_', '').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+            $('heroName').textContent = `${pretty}${hero.level ? ' · Lv ' + hero.level : ''}`;
+        }
+        $('heroName').style.color = player.team_name === 'radiant' ? C('--radiant') : player.team_name === 'dire' ? C('--dire') : '';
+        $('kda').textContent = `${player.kills ?? 0} / ${player.deaths ?? 0} / ${player.assists ?? 0}`;
+
+        // Economy
+        const gold = player.gold ?? 0;
+        const nw = player.net_worth ?? 0;
+
+        $('gold').textContent = fmtNum(gold);
+        $('netWorth').textContent = fmtNum(nw);
+        $('goldReliable').textContent = fmtNum(player.gold_reliable ?? 0);
+        $('goldUnreliable').textContent = fmtNum(player.gold_unreliable ?? 0);
+        $('gpm').textContent = fmtNum(player.gpm ?? 0);
+        $('xpm').textContent = fmtNum(player.xpm ?? 0);
+        $('lhdn').textContent = `${player.last_hits ?? 0} / ${player.denies ?? 0}`;
+
+        if (prev.gold !== null && gold !== prev.gold) showDelta('goldDelta', 'gold', gold - prev.gold);
+        if (prev.nw !== null && nw !== prev.nw) showDelta('netWorthDelta', 'netWorth', nw - prev.nw);
+        prev = { gold, nw };
+
+        // Chart (mirrors the server-side history logic)
+        addPoint(map.clock_time, nw);
+        if (map.clock_time >= 0) setSigned('nw60', netWorth60s(map.clock_time, nw));
+    });
+})();
+</script>
+</body>
+</html>

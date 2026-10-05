@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Dota 2 Side Monitor - Economy</title>
+    <!-- Include Chart.js from CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { background: #0f1115; color: #f0f0f0; font-family: sans-serif; padding: 20px; margin: 0; }
+        .container { display: flex; flex-direction: column; gap: 15px; max-width: 600px; margin: auto; }
+        .card { background: #1a1d24; border: 1px solid #2a2e39; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        h2 { margin-top: 0; color: #4caf50; font-size: 1.1rem; text-transform: uppercase; letter-spacing: 1px; }
+        .stat-row { display: flex; justify-content: space-between; font-size: 1.4rem; font-weight: bold; font-family: monospace; margin: 10px 0; }
+        .positive { color: #4caf50; }
+        .negative { color: #f44336; }
+        canvas { max-height: 250px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Dota 2 Economy Tracker</h1>
+        
+        <div class="card">
+            <h2>Live Economy</h2>
+            <div class="stat-row">
+                <span>Net Worth:</span>
+                <span id="networth">0</span>
+            </div>
+            <div class="stat-row">
+                <span>Current Gold:</span>
+                <span id="gold">0</span>
+            </div>
+            <div class="stat-row">
+                <span>Recent Change:</span>
+                <span id="gold-change">0</span>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Net Worth Over Time</h2>
+            <canvas id="netWorthChart"></canvas>
+        </div>
+    </div>
+
+    <!-- Socket.io & Chart Logic -->
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        let lastGold = 0;
+
+        // Initialize Chart.js Graph
+        const ctx = document.getElementById('netWorthChart').getContext('2d');
+        const netWorthChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [], // Match time labels
+                datasets: [{
+                    label: 'Net Worth',
+                    data: [],
+                    borderColor: '#4caf50',
+                    backgroundColor: 'rgba(76, 175, 80, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.2
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    x: { ticks: { color: '#888' }, grid: { color: '#2a2e39' } },
+                    y: { ticks: { color: '#888' }, grid: { color: '#2a2e39' } }
+                },
+                plugins: { legend: { display: false } }
+            }
+        });
+
+        socket.on('gameStateUpdate', (data) => {
+            if (!data.player || !data.map) return;
+
+            // 1. Extract values
+            const netWorth = data.player.net_worth || 0;
+            const currentGold = data.player.gold || 0;
+            const clockTime = data.map.clock_time || 0;
+
+            // Format clock time (e.g., 125s -> "02:05")
+            const absTime = Math.abs(clockTime);
+            const mins = Math.floor(absTime / 60).toString().padStart(2, '0');
+            const secs = (absTime % 60).toString().padStart(2, '0');
+            const timeLabel = `${clockTime < 0 ? '-' : ''}${mins}:${secs}`;
+
+            // 2. Calculate Gold Delta (Change since last packet)
+            const goldDelta = currentGold - lastGold;
+            const changeElement = document.getElementById('gold-change');
+            
+            if (lastGold !== 0 && goldDelta !== 0) {
+                changeElement.innerText = `${goldDelta > 0 ? '+' : ''}${goldDelta}`;
+                changeElement.className = goldDelta > 0 ? 'stat-row positive' : 'stat-row negative';
+            }
+            lastGold = currentGold;
+
+            // 3. Update Text UI
+            document.getElementById('networth').innerText = netWorth.toLocaleString();
+            document.getElementById('gold').innerText = currentGold.toLocaleString();
+
+            // 4. Update Chart Data (Push a new point every 10 seconds or game tick)
+            if (clockTime >= 0 && (netWorthChart.data.labels.length === 0 || netWorthChart.data.labels[netWorthChart.data.labels.length - 1] !== timeLabel)) {
+                // Limit data points to prevent crowding (keep last 50 points)
+                if (netWorthChart.data.labels.length > 50) {
+                    netWorthChart.data.labels.shift();
+                    netWorthChart.data.datasets[0].data.shift();
+                }
+                netWorthChart.data.labels.push(timeLabel);
+                netWorthChart.data.datasets[0].data.push(netWorth);
+                netWorthChart.update('none'); // 'none' for smooth real-time rendering without animation lag
+            }
+        });
+    </script>
+</body>
+</html>

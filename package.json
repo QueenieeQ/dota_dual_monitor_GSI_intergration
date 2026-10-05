@@ -1,0 +1,19 @@
+{
+  "name": "dota2-side-monitor",
+  "version": "1.0.0",
+  "description": "Real-time Dota 2 second-monitor dashboard driven by Game State Integration",
+  "main": "server.js",
+  "private": true,
+  "scripts": {
+    "start": "node server.js",
+    "simulate": "node simulate.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "chart.js": "4.4.7",
+    "express": "^4.21.2",
+    "socket.io": "^4.8.1"
+  }
+}
