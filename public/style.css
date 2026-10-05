@@ -68,6 +68,9 @@
     --state-hover: color-mix(in srgb, var(--md-sys-color-on-surface) 8%, transparent);
     --state-press: color-mix(in srgb, var(--md-sys-color-on-surface) 12%, transparent);
     --ease: cubic-bezier(0.2, 0, 0, 1);
+
+    /* Spacing between panels/columns; tightened for portrait layouts below */
+    --panel-gap: 12px;
 }
 
 :root[data-theme="light"] {
@@ -216,15 +219,32 @@ button { font: inherit; color: inherit; }
 /* =====================================================================
    Layout + cards
    ===================================================================== */
-.app { display: flex; flex-direction: column; gap: 16px; padding: 16px; }
+.app { display: flex; flex-direction: column; gap: var(--panel-gap); padding: 16px; }
 .columns {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
-    gap: 16px;
+    gap: var(--panel-gap);
     align-items: start;
 }
-.col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.col { display: flex; flex-direction: column; gap: var(--panel-gap); min-width: 0; }
 .col:not(:has(> .card:not([hidden]):not([data-off]))) { display: none; }
+
+/* ----- Portrait layout (vertical monitors) -----
+   Resolved by app.js from the "layoutOrientation" setting (auto/portrait/landscape)
+   onto body[data-orientation]. Flattens the 3 columns into one, reordered so the
+   panels most useful while playing sit near the top. */
+body[data-orientation="portrait"] {
+    --panel-gap: 10px;
+}
+body[data-orientation="portrait"] .columns { grid-template-columns: 1fr; }
+body[data-orientation="portrait"] .col { display: contents; }
+body[data-orientation="portrait"] #heroCard { order: 1; }
+body[data-orientation="portrait"] #perfCard { order: 2; }
+body[data-orientation="portrait"] #itemsCard { order: 3; }
+body[data-orientation="portrait"] #abilitiesCard { order: 4; }
+body[data-orientation="portrait"] #economyCard { order: 5; }
+body[data-orientation="portrait"] #minimapCard { order: 6; }
+body[data-orientation="portrait"] #eventsCard { order: 7; }
 
 .card {
     background: var(--md-sys-color-surface-container-low);

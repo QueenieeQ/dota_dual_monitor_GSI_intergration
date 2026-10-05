@@ -33,6 +33,13 @@
         { key: 'contrast', type: 'segmented', label: 'Contrast', default: '0', options: [['0', 'Standard'], ['0.5', 'Medium'], ['1', 'High']] },
         { key: 'defaultColor', type: 'color', label: 'Fallback color', default: '#c23c2a', help: 'Used outside a match, while spectating, or when hero colors are off.' },
 
+        { section: 'Layout' },
+        {
+            key: 'layoutOrientation', type: 'segmented', label: 'Panel layout', default: 'auto',
+            options: [['auto', 'Auto'], ['portrait', 'Portrait'], ['landscape', 'Landscape']],
+            help: 'Portrait stacks every panel in one column, reordered for a vertical monitor. Auto follows your window’s aspect ratio.',
+        },
+
         { section: 'Panels' },
         ...PANELS.map(([id, label]) => ({ key: `panel.${id}`, type: 'switch', label, default: true })),
 

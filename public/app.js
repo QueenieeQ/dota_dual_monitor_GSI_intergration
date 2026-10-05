@@ -827,13 +827,27 @@
         });
         chart.resize();
     }
+
+    const portraitQuery = window.matchMedia('(orientation: portrait)');
+    function applyOrientation() {
+        const mode = window.Settings.get('layoutOrientation');
+        const resolved = mode === 'auto' ? (portraitQuery.matches ? 'portrait' : 'landscape') : mode;
+        document.body.dataset.orientation = resolved;
+        chart.resize();
+    }
+    portraitQuery.addEventListener('change', () => {
+        if (window.Settings.get('layoutOrientation') === 'auto') applyOrientation();
+    });
+
     window.Settings.onChange((key) => {
         if (key === 'themeMode') renderThemeButton();
         if (key.startsWith('panel.')) applyPanelSettings();
         if (key === 'liveTimers') renderTimers();
+        if (key === 'layoutOrientation') applyOrientation();
     });
     renderThemeButton();
     applyPanelSettings();
+    applyOrientation();
 
     // ======================================================================
     // Socket wiring
