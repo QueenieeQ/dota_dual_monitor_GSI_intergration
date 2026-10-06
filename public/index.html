@@ -55,6 +55,7 @@
 </header>
 
 <main class="app">
+    <div class="pinned-rail" id="pinnedRail" hidden></div>
     <div class="columns">
         <div class="col">
             <!-- ===== Hero ===== -->
@@ -155,6 +156,12 @@
                 <div class="abilities" id="abilities"></div>
             </section>
 
+            <!-- ===== Timings ===== -->
+            <section class="card" id="timingsCard" data-panel="timings" hidden>
+                <h2>Timings</h2>
+                <div class="timings" id="timingsList"></div>
+            </section>
+
             <!-- ===== Events ===== -->
             <section class="card" id="eventsCard" data-panel="events" hidden>
                 <h2>Match events</h2>
@@ -196,10 +203,14 @@
     </section>
 </main>
 
+<!-- ===== Match event splash overlay ===== -->
+<div class="splash-overlay" id="splashOverlay" hidden></div>
+
 <script src="/vendor/chart.umd.js"></script>
 <script src="/socket.io/socket.io.js"></script>
 <script src="/settings.js"></script>
 <script src="/minimap.js"></script>
+<script src="/splash.js"></script>
 <script src="/app.js"></script>
 <script type="module" src="/theme.js"></script>
 </body>

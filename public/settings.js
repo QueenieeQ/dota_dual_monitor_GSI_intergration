@@ -8,7 +8,8 @@
     // Each entry renders one control in the settings sheet. Add new settings here.
     const PANELS = [
         ['hero', 'Hero'], ['performance', 'Performance'], ['economy', 'Economy'], ['minimap', 'Minimap'],
-        ['items', 'Items'], ['abilities', 'Abilities'], ['events', 'Match events'], ['chart', 'Net worth chart'],
+        ['items', 'Items'], ['abilities', 'Abilities'], ['timings', 'Timings'], ['events', 'Match events'],
+        ['chart', 'Net worth chart'],
         ['buildings', 'Buildings (spectating)'], ['scoreboard', 'Scoreboard (spectating)'], ['raw', 'Raw GSI data'],
     ];
 
@@ -54,7 +55,18 @@
 
         { section: 'Behaviour' },
         { key: 'deltaFade', type: 'range', label: 'Gold change highlight', default: 5, min: 1, max: 15, step: 1, unit: 's' },
-        { key: 'liveTimers', type: 'switch', label: 'Tick timers between updates', default: true, help: 'Smooth one-second countdowns for the clock, day/night, Roshan and wards.' },
+        { key: 'liveTimers', type: 'switch', label: 'Tick timers between updates', default: true, help: 'Smooth one-second countdowns for the clock, day/night, Roshan, wards, cooldowns and timings.' },
+
+        { section: 'Splash screens' },
+        { key: 'splashEnabled', type: 'switch', label: 'Enabled', default: true, help: 'Show a full-screen overlay for key match moments.' },
+        { key: 'splashDuration', type: 'range', label: 'Duration', default: 3, min: 1, max: 8, step: 0.5, unit: 's' },
+        { key: 'splash.join', type: 'switch', label: 'Match joined', default: true },
+        { key: 'splash.pick', type: 'switch', label: 'Hero picked', default: true },
+        { key: 'splash.kill', type: 'switch', label: 'Kills', default: true },
+        { key: 'splash.death', type: 'switch', label: 'Deaths', default: true },
+        { key: 'splash.streak', type: 'switch', label: 'Kill streaks', default: true },
+        { key: 'splash.winloss', type: 'switch', label: 'Win / loss', default: true },
+        { key: 'splash.conclusion', type: 'switch', label: 'Game conclusion', default: true },
     ];
 
     const defaults = Object.fromEntries(SCHEMA.filter((s) => s.key).map((s) => [s.key, s.default]));

@@ -100,6 +100,7 @@
         let cd = el.querySelector('.cd');
         if (!empty && cooldown > 0) {
             if (!cd) { cd = document.createElement('div'); cd.className = 'cd'; el.appendChild(cd); }
+            cd.dataset.cdBase = cooldown; // ticked smoothly between packets, see tickCountdowns()
             cd.textContent = fmtCd(cooldown);
         } else if (cd) cd.remove();
 
@@ -349,14 +350,14 @@
         if (state === 'alive') {
             return {
                 title: 'Roshan alive', sub: hp !== null && hp < 1 ? `${Math.round(hp * 100)}% HP` : 'In the pit',
-                ring: hp !== null && hp < 1 ? 'warn' : 'good', p: hp ?? 1,
+                ring: hp !== null && hp < 1 ? 'warn' : 'good', p: hp ?? 1, remaining: 0, alive: true,
                 details: [['State', 'Alive'], ...(hp !== null ? [['Health', `${Math.round(hp * 100)}%`]] : [])],
             };
         }
         if (state === 'respawn_base') {
             return {
                 title: 'Roshan dead', sub: `Earliest in ${fmtClock(remaining)}`, ring: 'bad',
-                p: 1 - remaining / ROSH_MIN,
+                p: 1 - remaining / ROSH_MIN, remaining, alive: false,
                 details: [
                     ['Earliest respawn', `${fmtClock(c + remaining)} (in ${fmtClock(remaining)})`],
                     ['Latest respawn', `${fmtClock(c + remaining + ROSH_WINDOW)}`],
@@ -366,17 +367,18 @@
         if (state === 'respawn_variable') {
             return {
                 title: 'Roshan may spawn', sub: `Latest in ${fmtClock(remaining)}`, ring: 'warn',
-                p: 1 - remaining / ROSH_WINDOW,
+                p: 1 - remaining / ROSH_WINDOW, remaining, alive: false,
                 details: [['Respawns any time before', `${fmtClock(c + remaining)} (in ${fmtClock(remaining)})`]],
             };
         }
-        return { title: `Roshan: ${prettify(state)}`, sub: remaining > 0 ? fmtClock(remaining) : '', ring: '', p: 1, details: [['State', prettify(state)]] };
+        return { title: `Roshan: ${prettify(state)}`, sub: remaining > 0 ? fmtClock(remaining) : '', ring: '', p: 1, remaining, alive: state === 'alive' };
     }
 
     function wardInfo(map, dt) {
         const team = [];
-        if (has(map.radiant_ward_purchase_cooldown)) team.push(['Radiant restock', map.radiant_ward_purchase_cooldown > 0 ? fmtClock(map.radiant_ward_purchase_cooldown) : 'in stock']);
-        if (has(map.dire_ward_purchase_cooldown)) team.push(['Dire restock', map.dire_ward_purchase_cooldown > 0 ? fmtClock(map.dire_ward_purchase_cooldown) : 'in stock']);
+        const teamRemaining = (s) => Math.max(0, (s || 0) - dt);
+        if (has(map.radiant_ward_purchase_cooldown)) team.push(['Radiant restock', map.radiant_ward_purchase_cooldown > 0 ? fmtClock(teamRemaining(map.radiant_ward_purchase_cooldown)) : 'in stock']);
+        if (has(map.dire_ward_purchase_cooldown)) team.push(['Dire restock', map.dire_ward_purchase_cooldown > 0 ? fmtClock(teamRemaining(map.dire_ward_purchase_cooldown)) : 'in stock']);
         if (!has(map.ward_purchase_cooldown) && !team.length) return null;
         const remaining = Math.max(0, (map.ward_purchase_cooldown || 0) - dt);
         if (remaining > 0) {
@@ -421,7 +423,96 @@
             renderTimers();
         });
     }
-    setInterval(renderTimers, 250);
+
+    // Smoothly tick any element carrying a raw cooldown value (item/ability
+    // cooldowns, buyback, hero respawn) between GSI packets, the same way
+    // renderTimers() already smooths the top-bar chips.
+    function tickCountdowns() {
+        const dt = elapsed();
+        document.querySelectorAll('[data-cd-base]').forEach((el) => {
+            const remaining = Math.max(0, Number(el.dataset.cdBase) - dt);
+            const fmt = el.dataset.cdFmt;
+            el.textContent = fmt === 'clock' ? fmtClock(remaining) : fmt === 'secs' ? `${Math.ceil(remaining)}s` : fmtCd(remaining);
+        });
+    }
+
+    setInterval(() => { renderTimers(); tickCountdowns(); renderTimingsPanel(); }, 250);
+
+    // ======================================================================
+    // Timings panel: Lotus pool, bounty/power runes, wisdom shrines, Roshan
+    // and the Aegis window — everything on a known clock-based schedule, plus
+    // Aegis tracked from the match events feed (shared with the Events panel
+    // below). Current-patch spawn schedule (approximate; may drift with
+    // balance patches):
+    // ======================================================================
+    const BOUNTY_FIRST = 0, BOUNTY_INTERVAL = 240;     // 4 bounty runes at 0:00, then every 4 min
+    const POWER_FIRST = 120, POWER_INTERVAL = 120;     // river runes every 2 min starting 2:00
+    const LOTUS_FIRST = 180, LOTUS_INTERVAL = 180;     // lotus pools refill every 3 min starting 3:00
+    const WISDOM_FIRST = 420, WISDOM_INTERVAL = 420;   // wisdom shrines activate every 7 min starting 7:00
+    const AEGIS_HOLD_SECONDS = 300;                    // aegis expires 5 min after pickup if unused
+
+    // Next absolute spawn time (game clock seconds) at or after c
+    function nextSpawn(first, interval, c) {
+        if (c < first) return first;
+        return first + (Math.floor((c - first) / interval) + 1) * interval;
+    }
+
+    function periodicRow(label, first, interval, c) {
+        const next = nextSpawn(first, interval, c);
+        const remaining = Math.max(0, next - c);
+        return { label, sub: `Next at ${fmtClock(next)}`, value: fmtClock(remaining), p: 1 - remaining / interval };
+    }
+
+    // Aegis: find the most recent Roshan kill and whatever happened to its aegis since
+    function aegisRow(c) {
+        const all = [...seenEvents.values()];
+        const lastKill = all.filter((e) => e.event_type === 'roshan_killed').sort((a, b) => b.game_time - a.game_time)[0];
+        if (!lastKill || !has(lastKill.game_time)) return null;
+        const resolved = all.find((e) => (e.event_type === 'aegis_picked_up' || e.event_type === 'aegis_denied') && e.game_time >= lastKill.game_time);
+
+        const map = timer.map;
+        const offset = map && has(map.game_time) && has(map.clock_time) ? map.game_time - map.clock_time : 0;
+
+        if (resolved?.event_type === 'aegis_denied') return null; // aegis destroyed, nothing to track
+        if (resolved?.event_type === 'aegis_picked_up') {
+            const pickupClock = resolved.game_time - offset;
+            const remaining = pickupClock + AEGIS_HOLD_SECONDS - c;
+            if (remaining <= 0) return null; // expired
+            return { label: 'Aegis', sub: 'Expires in', value: fmtClock(remaining), p: remaining / AEGIS_HOLD_SECONDS, kind: 'warn' };
+        }
+        // Not yet picked up: on the ground until Roshan respawns (or it's picked up)
+        const rInfo = roshanInfo(map, timer.roshan, c, elapsed());
+        if (!rInfo || rInfo.alive) return null; // Roshan already back — any unclaimed aegis is gone
+        return { label: 'Aegis', sub: 'On the ground — vanishes at respawn', value: fmtClock(rInfo.remaining ?? 0), p: 1, kind: 'bad' };
+    }
+
+    function renderTimingsPanel() {
+        const map = timer.map;
+        const list = $('timingsList');
+        $('timingsCard').hidden = !map;
+        if (!map) { list.innerHTML = ''; return; }
+        const dt = elapsed();
+        const c = (timer.clock ?? 0) + dt;
+
+        const rows = [
+            periodicRow('Lotus pool', LOTUS_FIRST, LOTUS_INTERVAL, c),
+            periodicRow('Bounty runes', BOUNTY_FIRST, BOUNTY_INTERVAL, c),
+            periodicRow('Power rune', POWER_FIRST, POWER_INTERVAL, c),
+            periodicRow('Wisdom shrine', WISDOM_FIRST, WISDOM_INTERVAL, c),
+        ];
+        const rInfo = roshanInfo(map, timer.roshan, c, dt);
+        if (rInfo) rows.push({ label: 'Roshan', sub: rInfo.title, value: rInfo.alive ? 'Alive' : fmtClock(rInfo.remaining ?? 0), p: rInfo.p, kind: rInfo.ring });
+        const aegis = aegisRow(c);
+        if (aegis) rows.push(aegis);
+
+        list.innerHTML = rows.map((r) => `
+            <div class="timing-row ${r.kind || ''}">
+                <span class="t-label">${esc(r.label)}</span>
+                <span class="t-value">${esc(r.value)}</span>
+                <span class="t-sub">${esc(r.sub)}</span>
+                <div class="t-bar"><div style="width:${Math.round(Math.max(0, Math.min(1, r.p ?? 0)) * 100)}%"></div></div>
+            </div>`).join('');
+    }
 
     // ======================================================================
     // Hero
@@ -467,10 +558,12 @@
         const life = $('lifeState');
         if (hero.alive === false) {
             life.className = 'life dead';
-            life.textContent = `☠ Dead — respawn in ${hero.respawn_seconds ?? '?'}s`;
+            life.innerHTML = has(hero.respawn_seconds)
+                ? `☠ Dead — respawn in <span data-cd-base="${hero.respawn_seconds}" data-cd-fmt="secs">${Math.ceil(hero.respawn_seconds)}s</span>`
+                : '☠ Dead';
         } else {
             life.className = 'life';
-            life.textContent = '';
+            life.innerHTML = '';
         }
 
         // Buyback readiness
@@ -478,7 +571,7 @@
         if (has(hero.buyback_cost) && hero.buyback_cost > 0 && (map?.clock_time ?? 0) > 0) {
             const gold = player?.gold ?? 0;
             if (hero.buyback_cooldown > 0) {
-                bb.innerHTML = chip(`Buyback cooldown <b>${fmtClock(hero.buyback_cooldown)}</b>`, 'warn');
+                bb.innerHTML = chip(`Buyback cooldown <b><span class="cdnum" data-cd-base="${hero.buyback_cooldown}" data-cd-fmt="clock">${fmtClock(hero.buyback_cooldown)}</span></b>`, 'warn');
             } else if (gold >= hero.buyback_cost) {
                 bb.innerHTML = chip(`✓ Buyback ready <b>${fmtNum(hero.buyback_cost)}</b>`, 'good');
             } else {
@@ -850,45 +943,52 @@
     applyOrientation();
 
     // ======================================================================
-    // Pin panels: click the pin icon to stick a panel to the top of the
-    // page while you scroll past the rest. Pinned panels stack below the
-    // top bar in document order; a ResizeObserver keeps that stack correct
-    // as panels change height (new events, buildings destroyed, etc.).
+    // Pin panels: click the pin icon to move a panel into the pinned rail,
+    // which sticks to the top of the page (above every column) in pin order.
+    // Unpinning moves the panel back to its exact original spot.
     // ======================================================================
     const PIN_ICON = '<path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5v6h2v-6h5v-2z"/>';
     const PINNED_KEY = 'd2sm.pinned.v1';
+    const pinnedRail = $('pinnedRail');
+    const pinOrigins = new Map(); // card -> { parent, next } to restore on unpin
     let pinnedIds = new Set();
     try { pinnedIds = new Set(JSON.parse(localStorage.getItem(PINNED_KEY) || '[]')); } catch { /* ignore */ }
     function persistPinned() {
         try { localStorage.setItem(PINNED_KEY, JSON.stringify([...pinnedIds])); } catch { /* ignore */ }
     }
 
-    function updatePinnedOffsets() {
-        const gap = 8;
-        let top = (document.querySelector('.top-bar')?.offsetHeight || 0) + gap;
-        document.querySelectorAll('.card.pinned').forEach((card) => {
-            card.style.top = `${top}px`;
-            top += card.offsetHeight + gap;
-        });
+    function updatePinnedRailTop() {
+        const topBar = document.querySelector('.top-bar');
+        pinnedRail.style.top = `${(topBar?.offsetHeight || 0) + 8}px`;
+        pinnedRail.hidden = pinnedRail.children.length === 0;
     }
 
-    function setPinned(card, on, { scroll = false } = {}) {
+    function setPinned(card, on) {
+        if (on === card.classList.contains('pinned')) return;
         card.classList.toggle('pinned', on);
         const btn = card.querySelector('.pin-btn');
         btn.classList.toggle('pinned', on);
         btn.setAttribute('aria-pressed', String(on));
         btn.title = on ? 'Unpin panel' : 'Pin panel to top';
-        if (on) pinnedIds.add(card.dataset.panel); else pinnedIds.delete(card.dataset.panel);
-        persistPinned();
-        updatePinnedOffsets();
 
-        // Pinning mid-scroll leaves the panel stuck wherever it happened to be
-        // until the user scrolls past it; jump straight to its locked slot instead.
-        if (on && scroll) {
-            const targetTop = parseFloat(card.style.top) || 0;
-            const delta = card.getBoundingClientRect().top - targetTop;
-            if (delta > 0.5) window.scrollBy({ top: delta, behavior: 'smooth' });
+        if (on) {
+            if (!pinOrigins.has(card)) pinOrigins.set(card, { parent: card.parentElement, next: card.nextElementSibling });
+            pinnedRail.appendChild(card);
+            pinnedIds.add(card.dataset.panel);
+        } else {
+            const origin = pinOrigins.get(card);
+            if (origin) {
+                if (origin.next && origin.next.isConnected) origin.parent.insertBefore(card, origin.next);
+                else origin.parent.appendChild(card);
+                pinOrigins.delete(card);
+            }
+            pinnedIds.delete(card.dataset.panel);
         }
+        card.classList.remove('pin-pop');
+        void card.offsetWidth; // restart animation
+        card.classList.add('pin-pop');
+        persistPinned();
+        updatePinnedRailTop();
     }
 
     const pinnableCards = document.querySelectorAll('.card[data-panel]');
@@ -899,19 +999,18 @@
         btn.setAttribute('aria-pressed', 'false');
         btn.title = 'Pin panel to top';
         btn.innerHTML = `<svg viewBox="0 0 24 24">${PIN_ICON}</svg>`;
-        btn.addEventListener('click', () => setPinned(card, !card.classList.contains('pinned'), { scroll: true }));
+        btn.addEventListener('click', () => setPinned(card, !card.classList.contains('pinned')));
         card.appendChild(btn);
-        if (pinnedIds.has(card.dataset.panel)) setPinned(card, true);
     });
+    // Restore pins in document order so the rail's stacking order is stable on load
+    pinnableCards.forEach((card) => { if (pinnedIds.has(card.dataset.panel)) setPinned(card, true); });
 
     if (window.ResizeObserver) {
-        const pinObserver = new ResizeObserver(() => updatePinnedOffsets());
-        pinnableCards.forEach((card) => pinObserver.observe(card));
         const topBar = document.querySelector('.top-bar');
-        if (topBar) pinObserver.observe(topBar);
+        if (topBar) new ResizeObserver(() => updatePinnedRailTop()).observe(topBar);
     }
-    window.addEventListener('resize', updatePinnedOffsets);
-    updatePinnedOffsets();
+    window.addEventListener('resize', updatePinnedRailTop);
+    updatePinnedRailTop();
 
     // ======================================================================
     // Socket wiring
@@ -944,6 +1043,7 @@
             setStatus('warn', 'In menus', 'Dota 2 connected — not in a match');
             timer.map = null;
             renderTimers();
+            renderTimingsPanel();
             return;
         }
 
@@ -967,6 +1067,7 @@
         renderItems(isPlayer ? data.items : null);
         renderAbilities(isPlayer ? data.abilities : null, data.hero?.name);
         renderEvents(data);
+        renderTimingsPanel();
         renderBuildings(data.buildings);
         renderScoreboard(data);
     });
