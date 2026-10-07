@@ -261,9 +261,9 @@ body[data-orientation="portrait"] #eventsCard { order: 7; }
     color: var(--md-sys-color-on-surface);
 }
 
-/* Pin button: click to stick a panel to the top of its column while
-   the page scrolls past the rest. JS maintains stacking via .card.pinned's
-   inline "top" (below the sticky top bar + any earlier pinned panels). */
+/* Pin button: click to move a panel into the pinned rail at the very top
+   of the page, which sticks there as you scroll past the rest. Unpinning
+   moves it back to its exact original spot in the layout (see app.js). */
 .pin-btn {
     position: absolute;
     top: 10px; right: 10px;
@@ -280,11 +280,22 @@ body[data-orientation="portrait"] #eventsCard { order: 7; }
 .pin-btn.pinned { color: var(--md-sys-color-primary); }
 .pin-btn.pinned svg { transform: rotate(45deg); }
 
-.card.pinned {
+.pinned-rail {
     position: sticky;
+    top: 0;
     z-index: 6;
+    display: flex;
+    flex-direction: column;
+    gap: var(--panel-gap);
+}
+.card.pinned {
     background: var(--md-sys-color-surface-container);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+.pin-pop { animation: pinPop 0.25s var(--ease); }
+@keyframes pinPop {
+    from { transform: scale(0.97); opacity: 0.6; }
+    to { transform: none; opacity: 1; }
 }
 
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -402,12 +413,16 @@ body[data-orientation="portrait"] #eventsCard { order: 7; }
 .minimap img { object-fit: cover; }
 .minimap-status { margin-top: 8px; }
 
-/* ----- Item / ability slots ----- */
-.items-main { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 12px; }
+/* ----- Item / ability slots -----
+   Each group (inventory, TP, neutral, backpack, stash) wraps as its own flex
+   item, so the panel reflows to fill the available width instead of leaving
+   a fixed-width row with empty space to the right on wider cards. */
+.items-groups { display: flex; flex-wrap: wrap; gap: 14px 20px; }
+.item-group { display: flex; flex-direction: column; gap: 4px; }
+.item-group:not(:has(> :not([hidden]))) { display: none; }
 .slot-grid { display: grid; gap: 6px; }
 .slot-grid.inv { grid-template-columns: repeat(3, 74px); }
-.slot-grid.small { grid-template-columns: repeat(6, 50px); margin-bottom: 12px; }
-.side-slots { display: grid; gap: 4px; }
+.slot-grid.small { grid-template-columns: repeat(6, 50px); }
 .slot-label { font: 500 12px/16px var(--md-ref-typeface-plain); letter-spacing: 0.5px; color: var(--md-sys-color-on-surface-variant); margin-bottom: 4px; }
 .slot {
     position: relative;
@@ -634,6 +649,55 @@ details summary { cursor: pointer; font: 500 14px/20px var(--md-ref-typeface-pla
     transition: opacity 0.25s;
 }
 
+/* ----- Timings ----- */
+.timings { display: flex; flex-direction: column; gap: 10px; }
+.timing-row { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; align-items: baseline; }
+.timing-row .t-label { font: 500 14px/20px var(--md-ref-typeface-plain); }
+.timing-row .t-sub { grid-column: 1; font: 400 12px/16px var(--md-ref-typeface-plain); color: var(--md-sys-color-on-surface-variant); }
+.timing-row .t-value { font: 500 16px/20px var(--md-ref-typeface-plain); font-variant-numeric: tabular-nums; text-align: right; }
+.timing-row.bad .t-value { color: var(--bad); }
+.timing-row.warn .t-value { color: var(--warn); }
+.timing-row.good .t-value { color: var(--good); }
+.t-bar { grid-column: 1 / -1; height: 4px; border-radius: var(--md-sys-shape-corner-full); background: var(--md-sys-color-surface-container-highest); overflow: hidden; }
+.t-bar div { height: 100%; background: var(--md-sys-color-primary); border-radius: inherit; transition: width 0.25s linear; }
+.timing-row.bad .t-bar div { background: var(--bad); }
+.timing-row.warn .t-bar div { background: var(--warn); }
+.timing-row.good .t-bar div { background: var(--good); }
+
+/* =====================================================================
+   Match event splash overlay
+   ===================================================================== */
+.splash-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: grid;
+    place-items: center;
+    pointer-events: none;
+    padding: 24px;
+}
+.splash-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 28px 44px;
+    border-radius: var(--md-sys-shape-corner-large);
+    background: color-mix(in srgb, var(--md-sys-color-surface-container-high) 92%, transparent);
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+    text-align: center;
+    animation: splashIn 0.25s var(--ease), splashOut 0.3s var(--ease) var(--splash-life, 2.7s) forwards;
+}
+.splash-card img { width: 72px; height: 40px; border-radius: var(--md-sys-shape-corner-medium); object-fit: cover; }
+.splash-title { font: 500 28px/34px var(--md-ref-typeface-plain); color: var(--md-sys-color-on-surface); }
+.splash-sub { font: 400 15px/20px var(--md-ref-typeface-plain); color: var(--md-sys-color-on-surface-variant); }
+.splash-card.good .splash-title { color: var(--good); }
+.splash-card.bad .splash-title { color: var(--bad); }
+.splash-card.radiant .splash-title { color: var(--radiant); }
+.splash-card.dire .splash-title { color: var(--dire); }
+@keyframes splashIn { from { transform: scale(0.85); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes splashOut { from { opacity: 1; } to { opacity: 0; } }
+
 @media (max-width: 760px) {
     .app { padding: 12px; }
     .timers { margin-left: 0; }
@@ -643,4 +707,6 @@ details summary { cursor: pointer; font: 500 14px/20px var(--md-ref-typeface-pla
     .mini-grid { grid-template-columns: repeat(2, 1fr); }
     .brow { grid-template-columns: 100px 1fr 60px; }
     .clock { font-size: 40px; }
+    .splash-title { font-size: 22px; }
+    .splash-card { padding: 20px 28px; }
 }

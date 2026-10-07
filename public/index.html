@@ -55,6 +55,7 @@
 </header>
 
 <main class="app">
+    <div class="pinned-rail" id="pinnedRail" hidden></div>
     <div class="columns">
         <div class="col">
             <!-- ===== Hero ===== -->
@@ -126,23 +127,39 @@
             <!-- ===== Items ===== -->
             <section class="card" id="itemsCard" data-panel="items" hidden>
                 <h2>Items</h2>
-                <div class="items-main">
-                    <div class="slot-grid inv" id="inventory"></div>
-                    <div class="side-slots">
-                        <div class="slot-label">TP</div><div id="tpSlot"></div>
-                        <div class="slot-label">Neutral</div><div id="neutralSlot"></div>
+                <div class="items-groups">
+                    <div class="item-group">
+                        <div class="slot-grid inv" id="inventory"></div>
+                    </div>
+                    <div class="item-group">
+                        <div class="slot-label">TP</div>
+                        <div id="tpSlot"></div>
+                    </div>
+                    <div class="item-group">
+                        <div class="slot-label">Neutral</div>
+                        <div id="neutralSlot"></div>
+                    </div>
+                    <div class="item-group">
+                        <div class="slot-label">Backpack</div>
+                        <div class="slot-grid small" id="backpack"></div>
+                    </div>
+                    <div class="item-group">
+                        <div class="slot-label" id="stashLabel">Stash</div>
+                        <div class="slot-grid small" id="stash"></div>
                     </div>
                 </div>
-                <div class="slot-label">Backpack</div>
-                <div class="slot-grid small" id="backpack"></div>
-                <div class="slot-label" id="stashLabel">Stash</div>
-                <div class="slot-grid small" id="stash"></div>
             </section>
 
             <!-- ===== Abilities ===== -->
             <section class="card" id="abilitiesCard" data-panel="abilities" hidden>
                 <h2>Abilities</h2>
                 <div class="abilities" id="abilities"></div>
+            </section>
+
+            <!-- ===== Timings ===== -->
+            <section class="card" id="timingsCard" data-panel="timings" hidden>
+                <h2>Timings</h2>
+                <div class="timings" id="timingsList"></div>
             </section>
 
             <!-- ===== Events ===== -->
@@ -186,10 +203,14 @@
     </section>
 </main>
 
+<!-- ===== Match event splash overlay ===== -->
+<div class="splash-overlay" id="splashOverlay" hidden></div>
+
 <script src="/vendor/chart.umd.js"></script>
 <script src="/socket.io/socket.io.js"></script>
 <script src="/settings.js"></script>
 <script src="/minimap.js"></script>
+<script src="/splash.js"></script>
 <script src="/app.js"></script>
 <script type="module" src="/theme.js"></script>
 </body>

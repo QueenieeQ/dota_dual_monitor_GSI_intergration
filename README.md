@@ -33,6 +33,7 @@ Each panel appears only when Dota actually sends its data.
 | Abilities | Icons, level pips, cooldowns, charges, ultimate highlighted | Playing |
 | Performance | Kill streak, hero/tower damage, healing, wards, runes, camps stacked, commands and actions per minute | Playing (some fields depend on the Dota build) |
 | Minimap | Heroes (with icons), creeps, wards with vision circles, towers, couriers and Roshan. Without minimap data it shows your own hero's position only | Playing (own hero always); full map if Dota sends the `minimap` block |
+| Timings | Countdowns to the next Lotus pool, bounty runes, power rune and wisdom shrine, plus Roshan and the Aegis window (on the ground, or expiring) once he's been killed | Always in a match |
 | Match events | Roshan kills, Aegis, bounty runes, tips, courier kills | Playing or spectating |
 | Buildings | HP of every tower, barracks and Ancient for both teams | Spectating / observing |
 | Scoreboard | All 10 players: hero, level, K/D/A, LH/DN, gold, net worth, GPM/XPM | Spectating / observing |
@@ -40,15 +41,22 @@ Each panel appears only when Dota actually sends its data.
 
 Some of the data in the C# Dota2GSI library (draft, league, wearables, couriers, neutral item stash) is only sent to spectators or observers. It isn't shown yet. `league` and `wearables` are turned off in the cfg because they are large and not used.
 
+The Timings panel's rune/Lotus/wisdom schedule is calculated from the match clock rather than sent by Dota 2 (GSI doesn't expose it), using the current patch's spawn intervals; a future balance patch could shift them.
+
+## Splash screens
+
+Full-screen overlays flash briefly for match join, hero pick, kills, deaths, kill streaks, and win/loss/game-conclusion. Turn them on or off as a whole, per event type, or adjust how long each one stays up in **Settings → Splash screens**.
+
 ## Theme and settings
 
 - **Theme button** (top right): cycles **Light → Dark → Game time**. In Game time mode the page is light during the in-game day and dark at night. Outside a match it follows your system setting.
 - **Hero colors**: when you pick a hero, the page reads the main color from the hero's portrait and builds a full Material You palette from it, the same way Android themes itself from your wallpaper. Meaning colors never change: green/red gains and losses, Radiant/Dire, HP/mana and gold.
 - **Settings** (gear button), saved in this browser:
   - **Appearance:** theme mode, hero colors on/off, color style (Faithful, Vibrant, Expressive, Content, Tonal spot), contrast level, and a fallback color for when no hero is picked
-  - **Panels:** show or hide each panel
+  - **Panels:** show or hide each panel. Click a panel's pin icon to move it into a rail that sticks to the top of the page; unpin to send it back to its normal spot
   - **Minimap:** background (detailed/simple), creeps/wards/buildings, ward vision, hero icon size, a coordinate readout, and the world bounds used to line markers up with the image
-  - **Behaviour:** how long gold changes stay highlighted, and whether timers tick between updates
+  - **Behaviour:** how long gold changes stay highlighted, and whether timers (including item/ability cooldowns and the Timings panel) tick smoothly between updates
+  - **Splash screens:** on/off, duration, and a toggle per event type
 
 To add a new setting, add an entry to `SCHEMA` in `public/settings.js`. The settings sheet builds its controls from that list.
 
